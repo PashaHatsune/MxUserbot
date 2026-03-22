@@ -32,22 +32,22 @@ from .modules.core.room_send import room_send
 from .modules.core.send_text import send_text
 from .modules.core.account_settings import is_owner
 from .modules.core.account_settings import set_account_data
-from .modules.core.load_modues import load_module
+from .modules.core.loader import Loader
 from .modules.core.account_settings import get_account_data
 
 
 from .modules.core.exceptions import CommandRequiresAdmin, CommandRequiresOwner, UploadFailed, handle_error_response
 from .registry import active_modules
 
+
 class Bot:
-
     def __init__(self):
-
         self.client = None
         
         self.modules = active_modules
         self.version = "1"
         self.info = "хуйлан"
+    
 
 
         self.uri_cache = dict()
@@ -60,6 +60,7 @@ class Bot:
 
 
         self.initialize_logger()
+    global modules
 
     def initialize_logger(self):
 
@@ -92,92 +93,6 @@ class Bot:
 
         return self.uri_cache.get(cache_key)
 
-
-    # async def upload_and_send_image(self, room, url, event=None, text=None, blob=False, blob_content_type="image/png", no_cache=False):
-    #     """
-
-    #     :param room: A MatrixRoom the image should be send to after uploading
-    #     :param url: Url of binary content of the image to upload
-    #     :param text: A textual representation of the image
-    #     :param blob: Flag to indicate if the second param is an url or a binary content
-    #     :param blob_content_type: Content type of the image in case of binary content
-    #     :param no_cache: Set to true if you want to bypass cache and always re-upload the file
-    #     :return:
-    #     """
-
-    #     if not text and not blob:
-    #         text = f"Image: {url}"
-
-    #     res = self.get_uri_cache(url, blob=blob)
-    #     if res:
-    #         try:
-    #             matrix_uri, mimetype, w, h, size = res
-    #             return await self.send_image(room, matrix_uri, text, event, mimetype, w, h, size)
-    #         except ValueError: # broken cache?
-    #             self.logger.warning(f"Image cache for {url} could not be unpacked, attempting to re-upload...")
-    #     try:
-    #         matrix_uri, mimetype, w, h, size = await self.upload_image(url, blob=blob, no_cache=no_cache)
-    #     except (UploadFailed, ValueError):
-    #         return await self.send_text(room, f"Sorry. Something went wrong fetching {url} and uploading the image to matrix server :(", event=event)
-
-    #     return await self.send_image(room, matrix_uri, text, event, mimetype, w, h, size)
-
-
-
-    # Helper function to upload a image from URL to homeserver. Use send_image() to actually send it to room.
-    # Throws exception if upload fails
-    # async def upload_image(self, url_or_bytes, blob=False, blob_content_type="image/png", no_cache=False):
-    #     """
-    #     :param url_or_bytes: Url or binary content of the image to upload
-    #     :param blob: Flag to indicate if the first param is an url or a binary content
-    #     :param blob_content_type: Content type of the image in case of binary content
-    #     :param no_cache: Flag to indicate whether to cache the resulting uploaded details
-    #     :return: A MXC-Uri https://matrix.org/docs/spec/client_server/r0.6.0#mxc-uri, Content type, Width, Height, Image size in bytes
-    #     """
-
-    #     self.client: AsyncClient
-    #     response: UploadResponse
-
-    #     cache_key = url_or_bytes
-    #     if blob:  ## url is bytes, cannot be used a key for cache
-    #         cache_key = hashlib.md5(url_or_bytes).hexdigest()
-
-    #     if no_cache:
-    #         cache_key = None
-
-    #     if blob:
-    #         i = Image.open(BytesIO(url_or_bytes))
-    #         image_length = len(url_or_bytes)
-    #         content_type = blob_content_type
-    #         (response, alist) = await self.client.upload(lambda a, b: url_or_bytes, blob_content_type, filesize=image_length)
-    #     else:
-    #         self.logger.debug(f"start downloading image from url {url_or_bytes}")
-    #         headers = {'User-Agent': 'Mozilla/5.0'}
-    #         url_response = requests.get(url_or_bytes, headers=headers)
-    #         self.logger.debug(f"response [status_code={url_response.status_code}, headers={url_response.headers}")
-
-    #         if url_response.status_code == 200:
-    #             content_type = url_response.headers.get("content-type")
-    #             self.logger.info(f"uploading content to matrix server [size={len(url_response.content)}, content-type: {content_type}]")
-    #             (response, alist) = await self.client.upload(lambda a, b: url_response.content, content_type)
-    #             self.logger.debug("response: %s", response)
-    #             i = Image.open(BytesIO(url_response.content))
-    #             image_length = len(url_response.content)
-    #         else:
-    #             self.logger.error("unable to request url: %s", url_response)
-    #             raise UploadFailed
-
-        # if isinstance(response, UploadResponse):
-        #     self.logger.info("uploaded file to %s", response.content_uri)
-        #     res = [response.content_uri, content_type, i.size[0], i.size[1], image_length]
-        #     if cache_key:
-        #         self.uri_cache[cache_key] = res
-        #     return res
-        # else:
-        #     response: UploadError
-        #     self.logger.error("unable to upload file. msg: %s", response.message)
-
-        # raise UploadFailed
 
 
 
@@ -364,7 +279,7 @@ class Bot:
     def reload_modules(self):
         for modulename in self.modules:
             self.logger.info(f'Reloading {modulename} ..')
-            self.modules[modulename] = load_module(modulename)
+            self.modules[modulename] = Loader().register_module(modulename)
 
             load_settings(get_account_data())
 
