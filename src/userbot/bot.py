@@ -1,84 +1,26 @@
-#!/usr/bin/env python3
-
-import asyncio
-import functools
-import glob
-import importlib
-import json
-
-import yaml
 import os
-import re
-import signal
-import sys
-import traceback
-import urllib.parse
-import logging
-import logging.config
-import datetime
 import hashlib
-from importlib import reload
-from io import BytesIO
-# from PIL import Image
+from loguru import logger
+from nio import RoomVisibility, RoomPreset, RoomCreateError, RoomResolveAliasResponse, RoomPutStateError
 
-import requests
-from nio import AsyncClient, InviteEvent, JoinError, RoomMessageText, MatrixRoom, LoginError, RoomMemberEvent, \
-    RoomVisibility, RoomPreset, RoomCreateError, RoomResolveAliasResponse, UploadError, UploadResponse, SyncError, \
-    RoomPutStateError
-
-
-from .modules.core.load_settings import load_settings 
+from .registry import active_modules
+from .modules.core.loader import Loader
 from .modules.core.room_send import room_send
 from .modules.core.send_text import send_text
 from .modules.core.account_settings import is_owner
-from .modules.core.account_settings import set_account_data
-from .modules.core.loader import Loader
+from .modules.core.load_settings import load_settings 
 from .modules.core.account_settings import get_account_data
-
-
-from .modules.core.exceptions import CommandRequiresAdmin, CommandRequiresOwner, UploadFailed, handle_error_response
-from .registry import active_modules
+from .modules.core.exceptions import CommandRequiresAdmin, CommandRequiresOwner
 
 
 class Bot:
     def __init__(self):
         self.client = None
-        
         self.modules = active_modules
         self.version = "1"
-        self.info = "хуйлан"
-    
-
-
         self.uri_cache = dict()
-
-        
-
         self.debug = os.getenv("DEBUG", "false").lower() == "true"
-        self.logger = None
 
-
-
-        self.initialize_logger()
-    global modules
-
-    def initialize_logger(self):
-
-        if os.path.exists('config/logging.yml'):
-            with open('config/logging.yml') as f:
-                config = yaml.load(f, Loader=yaml.Loader)
-                logging.config.dictConfig(config)
-        else:
-            log_format = '%(levelname)s - %(name)s - %(message)s'
-            logging.basicConfig(format=log_format)
-
-        self.logger = logging.getLogger("hemppa")
-
-        if self.debug:
-            logging.root.setLevel(logging.DEBUG)
-            self.logger.info("enabled debugging")
-
-        self.logger.debug("Logger initialized")
 
     def get_uri_cache(self, url, blob=False):
         """
@@ -92,8 +34,6 @@ class Bot:
             cache_key = hashlib.md5(url).hexdigest()
 
         return self.uri_cache.get(cache_key)
-
-
 
 
     async def send_html(self, room, html, plaintext, event=None, msgtype="m.notice", bot_ignore=False):
@@ -117,6 +57,7 @@ class Bot:
             msg["org.vranki.hemppa.ignore"] = "true"
         await room_send(room.room_id, event, 'm.room.message', msg)
 
+
     async def send_location(self, room, body, latitude, longitude, event=None, bot_ignore=False, asset='m.pin'):
         """
 
@@ -136,6 +77,7 @@ class Bot:
             "org.matrix.msc3488.asset": { "type": asset }
             }
         await room_send(room.room_id, event, 'm.room.message', locationmsg)
+
 
     async def send_image(self, room, url, body, event=None, mimetype=None, width=None, height=None, size=None):
         """
@@ -168,9 +110,10 @@ class Bot:
         if size:
             msg["info"]["size"] = size
 
-        self.logger.debug(f"send image room message: {msg}")
+        logger.debug(f"send image room message: {msg}")
 
         return await room_send(room.room_id, event, 'm.room.message', msg)
+
 
     async def set_room_avatar(self, room, uri):
         """
@@ -186,10 +129,11 @@ class Bot:
         result = await self.client.room_put_state(room.room_id, 'm.room.avatar', msg)
 
         if isinstance(result, RoomPutStateError):
-            self.logger.warning(f"can't set room avatar. {result.message}")
+            logger.warning(f"can't set room avatar. {result.message}")
             await send_text(self, room, f"sorry. can't set room avatar. I need at least be a moderator")
 
         return result
+
 
     async def send_msg(self, mxid, roomname, message):
         """
@@ -202,12 +146,13 @@ class Bot:
         # Sends private message to user. Returns true on success.
         msg_room = await self.find_or_create_private_msg(mxid, roomname)
         if not msg_room or (type(msg_room) is RoomCreateError):
-            self.logger.error(f'Unable to create room when trying to message {mxid}')
+            logger.error(f'Unable to create room when trying to message {mxid}')
             return False
 
         # Send message to the room
         await send_text(self, msg_room, message)
         return True
+
 
     async def find_or_create_private_msg(self, mxid, roomname):
         # Find if we already have a common room with user:
@@ -233,8 +178,9 @@ class Bot:
     def remove_callback(self, callback):
         for cb_object in self.client.event_callbacks:
             if cb_object.func == callback:
-                self.logger.info("remove callback")
+                logger.info("remove callback")
                 self.client.event_callbacks.remove(cb_object)
+
 
     def get_room_by_id(self, room_id):
         try:
@@ -248,15 +194,18 @@ class Bot:
             return rar.room_id
         return None
 
+
     # Throws exception if event sender is not a room admin
     def must_be_admin(self, room, event, power_level=50):
         if not self.is_admin(room, event, power_level=power_level):
             raise CommandRequiresAdmin
 
+
     # Throws exception if event sender is not a bot owner
     def must_be_owner(self, event):
         if not is_owner(event):
             raise CommandRequiresOwner
+
 
     # Returns true if event's sender has PL50 or more in the room event was sent in,
     # or is bot owner
@@ -268,21 +217,17 @@ class Bot:
         return room.power_levels.users[event.sender] >= power_level
 
 
-
     # Checks if this event should be ignored by bot, including custom property
     def should_ignore_event(self, event):
         return "org.vranki.hemppa.ignore" in event.source['content']
 
 
-
-
     def reload_modules(self):
         for modulename in self.modules:
-            self.logger.info(f'Reloading {modulename} ..')
+            logger.info(f'Reloading {modulename} ..')
             self.modules[modulename] = Loader().register_module(modulename)
 
             load_settings(get_account_data())
-
 
 
     def clear_modules(self):

@@ -6,8 +6,6 @@ def load_settings(data):
         return
     if not data.get('module_settings'):
         return
-    # if data.get('uri_cache'):
-    #     self.uri_cache = data['uri_cache']
     for modulename, moduleobject in active_modules.items():
         if data['module_settings'].get(modulename):
             try:

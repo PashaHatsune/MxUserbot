@@ -1,16 +1,15 @@
 
 
 
+import re
+import sys
+import datetime
 from loguru import logger
 
-from .exceptions import CommandRequiresAdmin, CommandRequiresOwner, UploadFailed, handle_error_response
-from ...registry import active_modules, join_hack_time, module_aliases
 from .send_text import send_text
-import sys
 from .starts_with_command import starts_with_command
-import datetime
-
-import re
+from .exceptions import CommandRequiresAdmin, CommandRequiresOwner
+from ...registry import active_modules, join_hack_time, module_aliases
 
 
 async def message_cb(bot, room, event):

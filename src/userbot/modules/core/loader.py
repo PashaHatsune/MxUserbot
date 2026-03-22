@@ -1,18 +1,11 @@
-
-
+import os
+import shutil
+import importlib
+from pathlib import Path
 from loguru import logger
 
-
-import glob
-import importlib
-
-import os
-
-from importlib import reload
-
 from ...registry import active_modules as modules
-import shutil
-from pathlib import Path
+
 
 class Loader:
     def __init__(
@@ -58,6 +51,7 @@ class Loader:
                 loaded.append(res)
             
             return loaded
+
 
     async def register_module(
             self,

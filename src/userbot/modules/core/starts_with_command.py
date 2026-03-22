@@ -4,9 +4,11 @@ import re
 
 from ...registry import invite_whitelist
 
+
 def starts_with_command(body):
     """Checks if body starts with ! and has one or more letters after it"""
     return re.match(r"^!\w.*", body) is not None
+
 
 def on_invite_whitelist(sender):
     for entry in invite_whitelist:

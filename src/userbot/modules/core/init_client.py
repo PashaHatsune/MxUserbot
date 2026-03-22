@@ -1,12 +1,15 @@
-from ....settings import config
 import os
 import sys
-from nio import AsyncClient
-from loguru import logger
 import asyncio
-from ... import registry 
+from loguru import logger
+from nio import AsyncClient
+
+from ...import registry 
+from ....settings import config
+
 
 _client_instance = None
+
 
 def init_client():
     global _client_instance

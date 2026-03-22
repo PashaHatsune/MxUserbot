@@ -18,7 +18,7 @@ class MatrixModule(BotModule):
         super().set_settings(data)
         if data.get('msg_users'):
             self.msg_users = data['msg_users']
-        self.info = data.get('info') or "\nMore information at https://github.com/vranki/hemppa"
+        self.info = data.get('info')
 
     def matrix_start(self, bot):
         super().matrix_start(bot)

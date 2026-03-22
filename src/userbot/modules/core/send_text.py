@@ -1,6 +1,14 @@
 from .room_send import room_send
 
-async def send_text(bot, room, body, event=None, msgtype="m.notice", bot_ignore=False):
+
+async def send_text(
+        bot,
+        room,
+        body,
+        event=None,
+        msgtype="m.notice",
+        bot_ignore=False
+):
     """
 
     :param room: A MatrixRoom the text should be send to

@@ -1,14 +1,12 @@
-import asyncio
-import signal
-import functools
-from .bot import Bot
-
-import traceback
 import sys
+import signal
+import asyncio
+import functools
+import traceback
 
-
-from .modules.core.init_client import init_client
+from .bot import Bot
 from . import handle_exit, run, shutdown
+from .modules.core.init_client import init_client
 
 
 async def main():

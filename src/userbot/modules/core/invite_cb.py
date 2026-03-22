@@ -1,22 +1,18 @@
-#!/usr/bin/env python3
+
 
 import datetime
-
-from importlib import reload
-
+from loguru import logger
 from nio import InviteEvent, JoinError, MatrixRoom
 
-
-from loguru import logger
 from ....settings import config
-
-from ...registry import invite_whitelist, join_on_invite
-from .starts_with_command import on_invite_whitelist
 from .account_settings import is_owner
-
 from .init_client import init_client
+from .starts_with_command import on_invite_whitelist
+from ...registry import invite_whitelist, join_on_invite
+
 
 client = init_client()
+
 
 async def invite_cb(room, event):
     room: MatrixRoom

@@ -6,7 +6,13 @@ from .init_client import init_client
 
 client = init_client()
 
-async def room_send(room_id, pre_event, msgtype, msg, **kwargs):
+async def room_send(
+        room_id,
+        pre_event,
+        msgtype,
+        msg,
+        **kwargs
+):
     if pre_event is None:
         logger.info(f'No pre-event passed. This module may not be set up to support m.thread.')
     try:
