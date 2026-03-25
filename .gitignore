@@ -80,14 +80,14 @@ docs/_build/
 
 # PyBuilder
 target/
-
+sekai.db
 # Jupyter Notebook
 .ipynb_checkpoints
 
 # IPython
 profile_default/
 ipython_config.py
-
+.github
 # pyenv
 .python-version
 uv.lock
