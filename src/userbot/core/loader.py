@@ -130,6 +130,8 @@ class Loader:
 
     async def register_module(self, spec, module_name):
         """Регистрация одиночного модуля"""
+
+        importlib.invalidate_caches()
         try: 
             module = importlib.util.module_from_spec(spec)
             if "." in module_name:
