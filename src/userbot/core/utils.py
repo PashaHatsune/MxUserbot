@@ -3,6 +3,15 @@
 
 
 
+
+def get_commands(cls):
+    cmds = {}
+    for attr_name in dir(cls):
+        method = getattr(cls, attr_name)
+        if callable(method) and getattr(method, 'is_command', False):
+            cmds[method.command_name] = method
+    return cmds
+
 # def is_owner(event):
 #     return event.sender in owners
 
