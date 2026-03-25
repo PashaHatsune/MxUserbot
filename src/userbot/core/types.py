@@ -5,80 +5,7 @@ from functools import wraps
 from abc import ABC, abstractmethod
 
 
-def get_commands(cls):
-    cmds = {}
-    for attr_name in dir(cls):
-        method = getattr(cls, attr_name)
-        if callable(method) and getattr(method, 'is_command', False):
-            cmds[method.command_name] = method
-    return cmds
-
-
-def command(name=None):
-    def decorator(func):
-        func.is_command = True
-        func.command_name = (name or func.__name__).lower()
-        return func
-    return decorator
-
-
-def tds(cls):
-    """Decorator that makes triple-quote docstrings translatable"""
-    if not hasattr(cls, 'strings'):
-        cls.strings = {}
-
-    @wraps(cls._internal_init)
-    async def _internal_init(self, *args, **kwargs):
-        def proccess_decorators(mark: str, obj: str):
-            nonlocal self
-            for attr in dir(func_):
-                if (
-                    attr.endswith("_doc")
-                    and len(attr) == 6
-                    and isinstance(getattr(func_, attr), str)
-                ):
-                    var = f"strings_{attr.split('_')[0]}"
-                    if not hasattr(self, var):
-                        setattr(self, var, {})
-
-                    getattr(self, var).setdefault(f"{mark}{obj}", getattr(func_, attr))
-
-        for command_, func_ in get_commands(cls).items():
-            proccess_decorators("_cmd_doc_", command_)
-            try:
-                func_.__doc__ = self.strings[f"_cmd_doc_{command_}"]
-            except AttributeError:
-                func_.__func__.__doc__ = self.strings[f"_cmd_doc_{command_}"]
-
-        self.__doc__ = self.strings.get("_cls_doc", self.__doc__)
-
-        return await self._internal_init._old_(self, *args, **kwargs)
-
-    _internal_init._old_ = cls._internal_init
-    cls._internal_init = _internal_init
-
-    for command_, func in get_commands(cls).items():
-        cmd_doc = func.__doc__
-        if cmd_doc:
-            cls.strings.setdefault(f"_cmd_doc_{command_}", inspect.cleandoc(cmd_doc))
-
-    cls_doc = cls.__dict__.get('__doc__') # Обходим наследование от ABC
-    if cls_doc:
-        cls.strings.setdefault("_cls_doc", inspect.cleandoc(cls_doc))
-
-    def _require(key: str, error_msg: str):
-        """Проверяет наличие и непустоту ключа в словаре strings"""
-        if not str(cls.strings.get(key, "")).strip():
-            raise ValueError(f"❌ {error_msg}")
-
-    _require("name", f"Модуль '{cls.__name__}' ОБЯЗАН иметь ключ 'name' в strings!")
-    _require("_cls_doc", f"Модуль '{cls.__name__}' ОБЯЗАН иметь docstring или ключ '_cls_doc' в strings!")
-
-    for cmd_name in get_commands(cls).keys():
-        _require(f"_cmd_doc_{cmd_name}", f"Команда '!{cmd_name}' ОБЯЗАНА иметь docstring!")
-
-    return cls
-
+from . import utils
 
 class ModuleConfig:
     def __init__(self, db, module_name, **defaults):
@@ -124,10 +51,10 @@ class Module(ABC):
 
 
         self._commands = {}
-        for cmd_name, func in get_commands(self.__class__).items():
+        for cmd_name, func in utils.get_commands(self.__class__).items():
             self._commands[cmd_name] = getattr(self, func.__name__)
     
-    def help(self):
+    def _help(self):
         """Возвращает основную документацию модуля"""
         return self.strings.get("_cls_doc", "Описание отсутствует")
 
@@ -135,13 +62,13 @@ class Module(ABC):
     def commands(self):
         return self._commands
 
-    def get(self, key, default=None): return self.db.get(self.name, key, default)
-    def set(self, key, value): return self.db.set(self.name, key, value)
+    def _get(self, key, default=None): return self.db.get(self.name, key, default)
+    def _set(self, key, value): return self.db.set(self.name, key, value)
 
-    def matrix_start(self, bot): pass
-    async def matrix_message(self, bot, room, event): pass
-    def matrix_stop(self, bot): pass
-    async def matrix_poll(self, bot, pollcount): pass
+    def _matrix_start(self, bot): pass
+    async def _matrix_message(self, bot, room, event): pass
+    def _matrix_stop(self, bot): pass
+    async def _matrix_poll(self, bot, pollcount): pass
 
 from datetime import datetime, timedelta
 from random import randrange
