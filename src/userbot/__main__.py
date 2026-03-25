@@ -33,9 +33,7 @@ async def main():
         config=conf, store_path="store.db"
         
     )
-    token = "syt_cGFzaGFoYXRzdW5l_HeWpPPPOzFGBrZdZQAYH_3jOS82"
-    print(config.matrix_config.access_token.get_secret_value())
-    client.access_token = token  #config.matrix_config.access_token.get_secret_value()
+    client.access_token = config.matrix_config.access_token.get_secret_value()
 
     # 4. Создание бота
     bot = Bot(db, client)

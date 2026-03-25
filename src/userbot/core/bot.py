@@ -9,7 +9,7 @@ from .callback import CallBack
 from .loader import Loader
 
 if typing.TYPE_CHECKING:
-    from ...database import Database
+    from ...database.methods import Database
 
 import time
 class Bot(Methods):
@@ -31,6 +31,7 @@ class Bot(Methods):
         self.start_time = int(time.time() * 1000)
         self.jointime = None
 
+
     def setup_callbacks(self):
         """Метод для регистрации всех обработчиков событий"""
         if self.client is None:
@@ -42,9 +43,7 @@ class Bot(Methods):
         self.client.add_event_callback(cb_handler.memberevent_cb, RoomMemberEvent)
         
         if hasattr(cb_handler, "message_cb"):
-            print(44)
             self.client.add_event_callback(cb_handler.message_cb, RoomMessageText)
-
 
 
     async def save_settings(self):
@@ -56,40 +55,35 @@ class Bot(Methods):
                     await self.db.set(name, "__config__", instance.get_settings())
                 except Exception:
                     logger.exception(f'Failed to save settings for {name}')
-        
         await self.db.set("core", "uri_cache", self.uri_cache)
+
 
     async def start(self):
         """Запуск модулей и загрузка их конфигурации"""
         logger.info('Starting modules..')
         for name, instance in self.active_modules.items():
-            print(666666)
-            logger.debug(name, instance)
-            logger.debug(hasattr(instance, "set_settings"))
             if hasattr(instance, "set_settings"):
                 saved_settings = await self.db.get(name, "__config__", {})
                 logger.debug(saved_settings)
                 instance.set_settings(saved_settings)
 
             if getattr(instance, "enabled", True):
-                if hasattr(instance, "matrix_start"):
+                if hasattr(instance, "_matrix_start"):
                     try:
-                        instance.matrix_start(self) 
+                        instance._matrix_start(self) 
                     except Exception:
                         logger.exception(f'Error starting module {name}')
         logger.info('All modules started.')
-
 
 
     def stop(self):
         logger.info(f'Stopping {len(self.active_modules)} modules..')
         for modulename, moduleobject in self.active_modules.items():
             try:
-                moduleobject.matrix_stop(self)
+                moduleobject._matrix_stop(self)
             except Exception:
                 logger.exception(f'unhandled exception from {modulename}.matrix_stop')
         logger.info(f'All modules stopped.')
-
 
 
     async def poll_timer(self):
@@ -133,7 +127,6 @@ class Bot(Methods):
 
 
     def load_settings(bot, data):
-        print(1)
         if not data:
             return
         if not data.get('module_settings'):
@@ -168,7 +161,6 @@ class Bot(Methods):
                     self.poll_task = asyncio.create_task(self.poll_timer())
 
                     data = self.get_account_data()
-                    logger.debug(data)
                     if data is None:
                         logger.info("Initializing account data for the first time...")
                         self.save_settings() 
@@ -191,6 +183,7 @@ class Bot(Methods):
                     await self.bot_task
                 else:
                     logger.error('Login failed! Check credentials.')
+
 
     async def shutdown(self):
         await self.client.close()

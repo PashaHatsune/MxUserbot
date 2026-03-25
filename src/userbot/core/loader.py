@@ -98,7 +98,6 @@ class Loader:
         self.uv_path = shutil.which(cmd="uv")
 
     async def register_all(self) -> None:
-        print(self.module_path)
         """Загрузить все модули из папки extra"""
         if not os.path.exists(self.module_path):
             os.makedirs(self.module_path)
@@ -110,7 +109,6 @@ class Loader:
         ]
         
         for mod_path in modulefiles:
-            logger.info(f'Loading: {mod_path}')
             stem = Path(mod_path).stem
             module_name = f'src.userbot.modules.{stem}'
             

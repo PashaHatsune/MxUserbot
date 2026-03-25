@@ -59,7 +59,6 @@ class CallBack:
 
 
     async def message_cb(self, room, event):
-        print(event)
         # Ignore if asked to ignore
         if self.bot.should_ignore_event(event):
             # logger.debug('Ignoring event!')

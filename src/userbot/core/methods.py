@@ -301,7 +301,6 @@ class Methods:
     def get_account_data(self):
         userid = urllib.parse.quote(config.matrix_config.owner)
 
-        print(self.client.access_token)
         headers = {
             'Authorization': f'Bearer {self.client.access_token}',
         }
