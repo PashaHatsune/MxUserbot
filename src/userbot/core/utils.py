@@ -22,12 +22,6 @@ def get_commands(cls):
 
 
 
-# def reload_modules(self):
-#     for modulename in self.modules:
-#         logger.info(f'Reloading {modulename} ..')
-#         self.modules[modulename] = Loader().register_module(modulename)
-
-#         load_settings(get_account_data())
 
 
 
