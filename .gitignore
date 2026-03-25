@@ -74,13 +74,13 @@ instance/
 
 # Scrapy stuff:
 .scrapy
-
+sekai.db
 # Sphinx documentation
 docs/_build/
 
 # PyBuilder
 target/
-sekai.db
+
 # Jupyter Notebook
 .ipynb_checkpoints
 
