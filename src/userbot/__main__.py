@@ -7,17 +7,14 @@ from nio import AsyncClient, ClientConfig
 
 from .core.bot import Bot
 from ..database.methods import Database
-# ТЕБЕ НУЖНО ИМПОРТИРОВАТЬ ЭТО (название класса может отличаться)
 from ..database import AsyncSessionWrapper  
 from ..settings import config
 
 import functools
 
 async def main():
-    # 1. Инициализация обертки сессий (движка алхимии)
     sw = AsyncSessionWrapper() 
     
-    # 2. Передаем sw в Database
     db = Database(sw) 
 
 
@@ -25,7 +22,6 @@ async def main():
     
 
     conf = ClientConfig(store_sync_tokens=True)
-    # 3. Настройка клиента Matrix
     client = AsyncClient(
         config.matrix_config.base_url, 
         config.matrix_config.owner,
@@ -35,7 +31,6 @@ async def main():
     )
     client.access_token = config.matrix_config.access_token.get_secret_value()
 
-    # 4. Создание бота
     bot = Bot(db, client)
 
 
