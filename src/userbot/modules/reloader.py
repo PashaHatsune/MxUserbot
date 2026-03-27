@@ -28,7 +28,7 @@ class MatrixModule(loader.Module):
         bot.all_modules.active_modules.clear()
         bot.active_modules.clear()
 
-        await bot.all_modules.register_all()
+        await bot.all_modules.register_all(bot)
         
         bot.active_modules = bot.all_modules.active_modules
         await bot.start()
