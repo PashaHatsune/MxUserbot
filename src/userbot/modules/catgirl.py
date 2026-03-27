@@ -13,34 +13,25 @@ class MatrixModule(loader.Module):
 
     @loader.command()
     async def catgirl(self, bot, room, event, args):
-        """Отправляет фото кошко девочки через Api."""
-        async with aiohttp.ClientSession() as s:
-            async with s.get(
-                url="https://api.nekosia.cat/api/v1/images/catgirl"
-            ) as r:
-                if r.status != 200:
-                    await bot.send_text(
-                        room=room,
-                        body=self.strings["error_api"]
-                    )
+            """Отправляет фото кошко-девочки через API."""
+            async with aiohttp.ClientSession() as s:
+                async with s.get("https://api.nekosia.cat/api/v1/images/catgirl") as r:
+                    if r.status != 200:
+                        return await bot.send_text(room, self.strings["error_api"])
+                    
+                    data = await r.json()
+                    url = data["image"]["original"]["url"]
+                    # Извлекаем имя файла из ссылки, чтобы сохранить расширение (.png/.jpg)
+                    filename = url.split("/")[-1] or "catgirl.png"
 
-                    return
-                
-                data = await r.json()
+                    async with s.get(url) as img:
+                        if img.status != 200:
+                            return await bot.send_text(room, self.strings["error_image"])
+                        image_bytes = await img.read()
 
-                url = data["image"]["original"]["url"]
-
-                async with s.get(url) as img:
-                    if img.status != 200:
-                        await bot.send_text(
-                            room=room,
-                            body=self.strings["error_image"]
-                        )
-
-                    image = await img.read()
-
-            await bot.send_image(
-                room,
-                image,
-                body="catgirl"
-            )
+                await bot.send_image(
+                    room=room,
+                    image=image_bytes,
+                    body="Милая кошко-девочка",
+                    filename=filename
+                )
