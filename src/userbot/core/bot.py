@@ -85,24 +85,6 @@ class Bot(Methods):
         await self.db.set("core", "uri_cache", self.uri_cache)
 
 
-    async def start(self):
-        """Запуск модулей и загрузка их конфигурации"""
-        logger.info('Starting modules..')
-        for name, instance in self.active_modules.items():
-            if hasattr(instance, "set_settings"):
-                saved_settings = await self.db.get(name, "__config__")
-                logger.debug(saved_settings)
-                instance.set_settings(saved_settings)
-
-            if getattr(instance, "enabled", True):
-                if hasattr(instance, "_matrix_start"):
-                    try:
-                        await instance._matrix_start(self) 
-                    except Exception:
-                        logger.exception(f'Error starting module {name}')
-        logger.info('All modules started.')
-
-
     def stop(self):
         logger.info(f'Stopping {len(self.active_modules)} modules..')
         for modulename, moduleobject in self.active_modules.items():
@@ -193,10 +175,10 @@ class Bot(Methods):
                         logger.info("Initializing account data for the first time...")
                         self.save_settings() 
 
-                    await self.all_modules.register_all()
+                    await self.all_modules.register_all(self)
                     self.active_modules = self.all_modules.active_modules
 
-                    await self.start()
+                    # await self.start()
                     await self.setup_security()
 
                     self.setup_callbacks()
