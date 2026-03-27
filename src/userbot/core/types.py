@@ -1,5 +1,4 @@
-import logging
-
+from loguru import logger
 import asyncio
 from abc import ABC
 
@@ -38,7 +37,8 @@ class Module(ABC):
         self.db = db
         self.allmodules = allmodules
         self.enabled = True
-        self.logger = logging.getLogger("module." + self.name)
+        # self.logger = logging.getLogger("module." + self.name)
+        self.logger = logger.bind(name=self.name)
         
         self.strings = getattr(self.__class__, "strings", {}).copy()
 
