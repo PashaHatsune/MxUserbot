@@ -3,6 +3,7 @@ import aiohttp
 from mautrix.types import MessageEvent
 from ...core import loader
 
+
 @loader.tds
 class MatrixModule(loader.Module):
     strings = {
@@ -13,7 +14,7 @@ class MatrixModule(loader.Module):
     }
 
     @loader.command()
-    async def catgirl(self, mx: Any, event: MessageEvent):
+    async def catgirl(self, mx, event: MessageEvent):
         """Отправляет фото кошко-девочки через API."""
         async with aiohttp.ClientSession() as s:
             async with s.get("https://api.nekosia.cat/api/v1/images/catgirl") as r:
@@ -35,9 +36,14 @@ class MatrixModule(loader.Module):
                         )
                     image_bytes = await img.read()
 
-            await mx.send_image(
+                    mxc = await mx.client.upload_media(
+                        data=image_bytes,
+                        mime_type="image/png",
+                        filename=filename
+
+                    )
+
+            await mx.client.send_image(
                 room_id=event.room_id,
-                image=image_bytes,
-                body="Милая кошко-девочка",
-                filename=filename
+                url=mxc
             )
