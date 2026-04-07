@@ -18,9 +18,9 @@ class MatrixConfig(BaseConfig):
     )
 
     owner: str
-    access_token: SecretStr
+    password: SecretStr
     base_url: str
-    appid: str = Field('org.vranki.hemppa')
+    device_id: str = Field('org.vranki.hemppa')
 
 
 class Config(BaseConfig):

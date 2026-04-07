@@ -1,4 +1,4 @@
-from ..core import loader
+from ...core import loader
 
 
 @loader.tds
@@ -10,9 +10,9 @@ class MatrixModule(loader.Module):
     }
 
     @loader.command()
-    async def hello(self, bot, event):
+    async def hello(self, mx, event):
         """Отправляет приветственное сообщение"""
-        await bot.send_text(event.room, self.strings["soo"])
+        await mx.send_text(event.room, self.strings["soo"])
 
         # await bot.send_image(room, "mxc://pashahatsune.duckdns.org/YyQjXCmBkpHvkkBTZxMdsIgw", event.body)
 

@@ -1,7 +1,7 @@
-from ..core import loader
-
+from typing import Any
 import aiohttp
-
+from mautrix.types import MessageEvent
+from ...core import loader
 
 @loader.tds
 class MatrixModule(loader.Module):
@@ -13,12 +13,15 @@ class MatrixModule(loader.Module):
     }
 
     @loader.command()
-    async def catgirl(self, bot, event):
+    async def catgirl(self, mx: Any, event: MessageEvent):
         """Отправляет фото кошко-девочки через API."""
         async with aiohttp.ClientSession() as s:
             async with s.get("https://api.nekosia.cat/api/v1/images/catgirl") as r:
                 if r.status != 200:
-                    return await bot.send_text(event.room, self.strings["error_api"])
+                    return await mx.client.send_text(
+                        room_id=event.room_id, 
+                        html=self.strings["error_api"]
+                    )
                 
                 data = await r.json()
                 url = data["image"]["original"]["url"]
@@ -26,11 +29,14 @@ class MatrixModule(loader.Module):
 
                 async with s.get(url) as img:
                     if img.status != 200:
-                        return await bot.send_text(event.room, self.strings["error_image"])
+                        return await mx.client.send_text(
+                            room_id=event.room_id, 
+                            html=self.strings["error_image"]
+                        )
                     image_bytes = await img.read()
 
-            await bot.send_image(
-                room=event.room,
+            await mx.send_image(
+                room_id=event.room_id,
                 image=image_bytes,
                 body="Милая кошко-девочка",
                 filename=filename

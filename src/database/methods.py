@@ -9,13 +9,17 @@ class Database:
         self._sw = session_wrapper
 
     async def get(self, owner, key, default=None):
-        async for db in self._sw.get_db():
-            stmt = select(self._sw.Settings).where(
-                self._sw.Settings.owner == owner,
-                self._sw.Settings.key == key
-            )
-            result = await db.scalar(stmt)
-            return result if result else default
+            async for db in self._sw.get_db():
+                stmt = select(self._sw.Settings).where(
+                    self._sw.Settings.owner == owner,
+                    self._sw.Settings.key == key
+                )
+                result = await db.scalar(stmt)
+                
+                if result is not None:
+                    return result.value
+                
+                return default
 
     async def set(self, owner, key, value):
         async for db in self._sw.get_db():

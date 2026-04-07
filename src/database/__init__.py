@@ -1,6 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+from .methods import Database
 from .__main__ import Base
 
 class AsyncSessionWrapper:
@@ -24,5 +25,4 @@ class AsyncSessionWrapper:
             yield session
 
 session = AsyncSessionWrapper()
-
 

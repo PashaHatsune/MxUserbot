@@ -6,13 +6,13 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "aiosqlite>=0.22.1",
+    "av>=17.0.0",
     "loguru>=0.7.3",
-    "matrix-nio>=0.25.2",
-    "patchlib>=0.3.0",
-    "pillow>=12.1.1",
+    "mautrix>=0.21.0",
+    "pillow>=12.2.0",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.13.1",
-    "pyyaml>=6.0.3",
-    "sqlalchemy>=2.0.48",
-    "yyaml>=0.0.1",
+    "requests>=2.33.1",
+    "ruamel-yaml>=0.19.1",
+    "sqlalchemy>=2.0.49",
 ]

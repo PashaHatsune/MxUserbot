@@ -50,14 +50,14 @@ class SekaiSecurity:
         Оборачивает колбэк и не пускает его дальше, если отправитель не овнер.
         """
         @wraps(func)
-        async def wrapper(room, event):
+        async def wrapper(event):
             sender = getattr(event, "sender", None)
             
             if not sender:
-                return await func(room, event)
+                return await func(event)
 
             if self.is_owner(sender):
-                return await func(room, event)
+                return await func(event)
             
             #logger.debug(f"Security: Blocked event from {sender}")
             return 

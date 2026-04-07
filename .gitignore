@@ -12,7 +12,7 @@ __pycache__/
 
 # C extensions
 *.so
-
+config.yaml
 # Distribution / packaging
 .Python
 build/
@@ -136,3 +136,4 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+voice_msg.p

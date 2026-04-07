@@ -1,4 +1,6 @@
-from ..core import loader
+from ...core import loader
+from mautrix.types import MessageEvent
+from typing import Any # Для правильной типизации mx, если не хочешь импортировать MXUserBot
 
 @loader.tds
 class MatrixModule(loader.Module):
@@ -15,11 +17,18 @@ class MatrixModule(loader.Module):
     }
 
     @loader.command()
-    async def help(self, bot, event):
+    async def help(self, mx: Any, event: MessageEvent):
         """Отображает список команд"""
-        parts = event.body.split()
+        
+        # В mautrix текст сообщения всегда в event.content.body
+        if not event.content.body:
+            return
+            
+        parts = event.content.body.split()
         args = parts[1] if len(parts) > 1 else None
-        prefix = bot.prefixes[0]
+        
+        # Берем префикс из твоего MXUserBot
+        prefix = mx.prefixes[0]
 
         if not args:
             msg = self.strings["header"].format(
@@ -28,7 +37,7 @@ class MatrixModule(loader.Module):
             )
             msg += self.strings["modules_title"]
             
-            for mod in bot.active_modules.values():
+            for mod in mx.active_modules.values():
                 if mod.commands:
                     cmds = ", ".join([f"<code>{prefix}{c}</code>" for c in mod.commands.keys()])
                 else:
@@ -40,26 +49,29 @@ class MatrixModule(loader.Module):
                     commands=cmds
                 )
 
-            return await bot.send_text(event.room, msg)
+            # Используем html=msg, чтобы mautrix правильно обработал теги
+            # event.room_id вместо event.room
+            return await mx.client.send_text(
+                room_id=event.room_id, 
+                html=msg
+            )
 
         cmd_name = args.lower()
-        for mod in bot.active_modules.values():
+        for mod in mx.active_modules.values():
             if cmd_name in mod.commands:
                 func = mod.commands[cmd_name]
                 doc = mod.strings.get(f"_cmd_doc_{cmd_name}") or func.__doc__ or self.strings["no_desc"]
                 
-                return await bot.send_text(
-                    event.room, 
-                    self.strings["cmd_info"].format(
-                        prefix=prefix,
-                        name=cmd_name,
-                        desc=doc
-                    )
+                res = self.strings["cmd_info"].format(
+                    prefix=prefix,
+                    name=cmd_name,
+                    desc=doc
                 )
+                return await mx.client.send_text(event.room_id, html=res)
         
-        await bot.send_text(
-            event.room, 
-            self.strings["cmd_not_found"].format(
+        await mx.client.send_text(
+            event.room_id, 
+            html=self.strings["cmd_not_found"].format(
                 prefix=prefix,
                 name=cmd_name
             )

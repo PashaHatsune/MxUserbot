@@ -1,5 +1,6 @@
-from ..core import loader
-
+from typing import Any
+from mautrix.types import MessageEvent
+from ...core import loader
 
 @loader.tds
 class MatrixModule(loader.Module):
@@ -15,31 +16,34 @@ class MatrixModule(loader.Module):
     }
 
     @loader.command()
-    async def set_prefix(self, bot, event):
+    async def set_prefix(self, mx: Any, event: MessageEvent):
         """Установить новый префикс (только спец. символы)"""
         
-        parts = event.body.split()
+        if not event.content.body:
+            return
+
+        parts = event.content.body.split()
         
         if len(parts) < 2:
-            await bot.send_text(
-                event.room,
-                self.strings["error_no_args"]
+            await mx.client.send_text(
+                room_id=event.room_id,
+                html=self.strings["error_no_args"]
             )
             return
 
         new_prefix = parts[1]
 
         if len(new_prefix) != 1:
-            await bot.send_text(
-                event.room,
-                self.strings["error_too_long"]
+            await mx.client.send_text(
+                room_id=event.room_id,
+                html=self.strings["error_too_long"]
             )
             return
 
         if new_prefix not in self.strings["allowed_symbols"]:
-            await bot.send_text(
-                event.room,
-                self.strings["error_set_prefix"].format(
+            await mx.client.send_text(
+                room_id=event.room_id,
+                html=self.strings["error_set_prefix"].format(
                     new_prefix=new_prefix,
                     allowed_symbols=self.strings["allowed_symbols"]
                 )
@@ -48,9 +52,9 @@ class MatrixModule(loader.Module):
 
         query = [new_prefix]
         await self._set("prefix", query)
-        bot.prefixes = query
+        mx.prefixes = query
 
-        await bot.send_text(
-            event.room,
-            self.strings["success_set_prefix"].format(new_prefix=new_prefix)
+        await mx.client.send_text(
+            room_id=event.room_id,
+            html=self.strings["success_set_prefix"].format(new_prefix=new_prefix)
         )

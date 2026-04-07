@@ -85,41 +85,39 @@ def tds(cls):
     return cls
 
 
-
+import sys
 class Loader:
     def __init__(self, db_wrapper):
         self.db = db_wrapper 
         self.active_modules: typing.Dict[str, object] = {}
-        self.module_path = Path(__file__).resolve().parents[2] / 'userbot' / 'modules'
-        
+        self.module_path = Path(__file__).resolve().parents[2] / 'mxuserbot' / 'modules'
+        self.core_path = self.module_path / "core"
+        self.community_path = self.module_path / "community"
+
         self._background_tasks: typing.Set[asyncio.Task] = set()
 
 
     async def register_all(self, bot) -> None:
-        """Сканирует папку и запускает регистрацию модулей"""
-        if not self.module_path.exists():
-            self.module_path.mkdir(parents=True, exist_ok=True)
+        """Сканирует core и community папки с приоритетом core"""
+        for p in [self.core_path, self.community_path]:
+            p.mkdir(parents=True, exist_ok=True)
 
-        module_files = [
-            f for f in self.module_path.iterdir() 
-            if f.suffix == ".py" and not f.name.startswith("_")
-        ]
+        community_files = [f for f in self.community_path.iterdir() if f.suffix == ".py" and not f.name.startswith("_")]
+        core_files = [f for f in self.core_path.iterdir() if f.suffix == ".py" and not f.name.startswith("_")]
 
-        if not module_files:
-            logger.warning("Папка модулей пуста.")
-            return
+        for path in community_files:
+            await self.register_module(path, bot, is_core=False)
 
-        import_tasks = [
-            self.register_module(path, bot) 
-            for path in module_files
-        ]
-        
-        await asyncio.gather(*import_tasks, return_exceptions=True)
-        logger.info(f"Загружено модулей: {len(self.active_modules)}. Ожидание фоновой активации...")
+        for path in core_files:
+            await self.register_module(path, bot, is_core=True)
 
-    async def register_module(self, path: Path, bot):
-        """Низкоуровневый импорт файла и создание инстанса"""
-        module_name = f"src.userbot.modules.{path.stem}"
+        logger.info(f"Загружено модулей: {len(self.active_modules)} (Core приоритет применен).")
+
+
+    async def register_module(self, path: Path, bot, is_core: bool = False):
+        """Импорт модуля с учетом вложенности (core/community)"""
+        subfolder = "core" if is_core else "community"
+        module_name = f"src.mxuserbot.modules.{subfolder}.{path.stem}"
         
         try:
             spec = importlib.util.spec_from_file_location(module_name, str(path))
@@ -127,8 +125,7 @@ class Loader:
                 return
 
             module = importlib.util.module_from_spec(spec)
-            if "." in module_name:
-                module.__package__ = module_name.rsplit('.', 1)[0]
+            module.__package__ = f"src.mxuserbot.modules.{subfolder}"
             
             spec.loader.exec_module(module)
 
@@ -138,28 +135,57 @@ class Loader:
             cls = getattr(module, 'MatrixModule')
             short_name = path.stem
             
-            try:
-                instance = cls()
-            except TypeError:
-                instance = cls(short_name)
-            
+            instance = cls()
             instance._is_ready = False
-
+            instance._is_core = is_core
 
             if hasattr(instance, '_internal_init'):
                 await instance._internal_init(short_name, self.db, self)
 
             self._apply_metadata(instance, spec)
+            
             self.active_modules[short_name] = instance
 
             startup_task = asyncio.create_task(self._finalize_module_startup(instance, bot, short_name))
             self._background_tasks.add(startup_task)
             startup_task.add_done_callback(self._background_tasks.discard)
 
-            logger.debug(f"Импортирован файл модуля: {short_name}")
+            type_str = "CORE" if is_core else "COMM"
+            logger.debug(f"[{type_str}] Импортирован модуль: {short_name}")
 
         except Exception:
-            logger.exception(f"Ошибка при импорте файла {path.name}")
+            logger.exception(f"Ошибка при импорте модуля {path.name}")
+
+
+    async def unload_module(self, name: str, bot) -> bool:
+        if name not in self.active_modules:
+            logger.warning(f"Модуль {name} не найден среди активных.")
+            return False
+
+        instance = self.active_modules[name]
+
+        try:
+            if hasattr(instance, "_matrix_stop"):
+                if inspect.iscoroutinefunction(instance._matrix_stop):
+                    await instance._matrix_stop(bot)
+                else:
+                    instance._matrix_stop(bot)
+        except Exception:
+            logger.exception(f"Ошибка при вызове _matrix_stop у модуля {name}")
+
+        module_name_to_del = None
+        for mod_name in list(sys.modules.keys()):
+            if mod_name.endswith(f".{name}") and "src.userbot.modules" in mod_name:
+                module_name_to_del = mod_name
+                break
+        
+        if module_name_to_del:
+            del sys.modules[module_name_to_del]
+
+        del self.active_modules[name]
+        logger.success(f"Модуль {name} успешно выгружен.")
+        return True
+
 
 
     async def _finalize_module_startup(self, instance, bot, name):
