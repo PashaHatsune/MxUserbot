@@ -1,11 +1,12 @@
 
 ---
 
-# Sekai-Matrix-UserBot
+<img width="1376" height="768" alt="999" src="https://github.com/user-attachments/assets/778dce44-de22-4f52-88c6-f56b3fa9d297" />
 
 Matrix-юзербот, созданный как модульное переосмысление проекта [Hemppa](https://github.com/vranki/hemppa).
 
 > **В РАЗРАБОТКЕ**
+
 > Проект находится в ранней стадии. Опыта в коде пока мало, поэтому активно использовался ИИ. Не судите строго, я только учусь.
 
 ## Участие в разработке
