@@ -15,7 +15,7 @@ class MatrixModule(loader.Module):
     }
 
     @loader.command()
-    async def dlmod(self, mx, event):
+    async def mdl(self, mx, event):
         """!mdl <url> — скачивает и подгружает модуль"""
         text = getattr(event.content, "body", "")
         parts = text.split()
