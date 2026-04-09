@@ -21,6 +21,79 @@ def get_commands(cls):
 
 
 
+def get_args(message):
+    import shlex
+    """
+    Get arguments from message
+    :param message: Message or string to get arguments from
+    :return: List of arguments
+    """
+    if not (message := getattr(message, "message", message)):
+        return False
+
+    if len(message := message.split(maxsplit=1)) <= 1:
+        return []
+
+    message = message[1]
+
+    try:
+        split = shlex.split(message)
+    except ValueError:
+        return message  # Cannot split, let's assume that it's just one long message
+
+
+
+    return list(filter(lambda x: len(x) > 0, split))
+
+
+import os
+def get_args_raw(message) -> str:
+    """
+    Get the parameters to the command as a raw string (not split)
+    :param message: Message or string to get arguments from
+    :return: Raw string of arguments
+    """
+    if not (message := getattr(message, "message", message)):
+        return False
+
+    return args[1] if len(args := message.split(maxsplit=1)) > 1 else ""
+
+
+
+
+def escape_html(text: str, /) -> str:  # sourcery skip
+    """
+    Pass all untrusted/potentially corrupt input here
+    :param text: Text to escape
+    :return: Escaped text
+    """
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def escape_quotes(text: str, /) -> str:
+    """
+    Escape quotes to html quotes
+    :param text: Text to escape
+    :return: Escaped text
+    """
+    return escape_html(text).replace('"', "&quot;")
+
+
+def get_base_dir() -> str:
+    """
+    Get directory of this file
+    :return: Directory of this file
+    """
+    return get_dir(__file__)
+
+
+def get_dir(mod: str) -> str:
+    """
+    Get directory of given module
+    :param mod: Module's `__file__` to get directory of
+    :return: Directory of given module
+    """
+    return os.path.abspath(os.path.dirname(os.path.abspath(mod)))
 
 
 
