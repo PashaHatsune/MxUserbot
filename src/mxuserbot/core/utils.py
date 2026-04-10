@@ -82,14 +82,16 @@ async def answer(
         if relates_to:
             content.relates_to = relates_to
         
-    # Отправляем. Если mx — это интерфейс, он вызовет send_message у клиента.
-    # Если mx — это клиент, он вызовет свой метод.
     if hasattr(mx, "send_message"):
         return await mx.send_message(room_id, content, **kwargs)
     return await mx.client.send_message(room_id, content, **kwargs)
 
 from mautrix.util import markdown
 from mautrix.crypto.attachments import encrypt_attachment
+
+import io
+from PIL import Image
+from mautrix.types import ImageInfo # Убедись, что импортировано
 
 
 async def send_image(
@@ -101,14 +103,18 @@ async def send_image(
     file_name: str | None = None,
     caption: str | None = None,
     relates_to=None,
+    html: bool = True,
     **kwargs,
 ):
     if not url and not file_bytes:
         raise ValueError("Нужно указать либо url, либо file_bytes")
 
-    caption = (caption or "").strip() or None
     file_name = file_name or "image.png"
     is_enc = await mx.client.state_store.is_encrypted(room_id)
+
+    plain_caption = None
+    if caption:
+        plain_caption = await parse_html(caption) if html else caption
 
     extra = {"relates_to": relates_to} if relates_to else {}
 
@@ -119,23 +125,23 @@ async def send_image(
                     file_bytes = await r.read()
 
         enc_data, enc_info = encrypt_attachment(file_bytes)
+
         mxc = await mx.upload_media(
             enc_data,
             mime_type="application/octet-stream",
             filename=file_name,
         )
+
         enc_info.url = mxc
 
         content_data = {
             "msgtype": MessageType.IMAGE,
-            "body": caption or file_name,
+            "body": plain_caption or file_name,
+            "filename": file_name,
             "info": info,
             "file": enc_info,
             **extra,
         }
-        if caption:
-            content_data["format"] = "org.matrix.custom.html"
-            content_data["formatted_body"] = markdown.render(caption)
 
     else:
         if file_bytes and not url:
@@ -149,18 +155,18 @@ async def send_image(
 
         content_data = {
             "msgtype": MessageType.IMAGE,
-            "body": caption or file_name,
+            "body": plain_caption or file_name,
+            "filename": file_name,
             "info": info,
             "url": mxc,
-            "filename": file_name,
             **extra,
         }
-        if caption:
-            content_data["format"] = "org.matrix.custom.html"
-            content_data["formatted_body"] = markdown.render(caption)
+
+    if caption and html:
+        content_data["format"] = Format.HTML
+        content_data["formatted_body"] = caption
 
     content = MediaMessageEventContent(**content_data)
-
 
     return await mx.client.send_message_event(
         room_id,
@@ -168,8 +174,6 @@ async def send_image(
         content,
         **kwargs,
     )
-
-    
 
 
 
