@@ -72,6 +72,7 @@ class CallBack:
             except Exception as e:
                 logger.warning(f"Failed to check member count in {room_id}: {e}")
 
+
     async def message_cb(self, evt: MessageEvent):
         """Обработка сообщений (аналог RoomMessage)"""
         if self.mx.start_time and evt.timestamp < self.mx.start_time:
@@ -86,17 +87,17 @@ class CallBack:
 
         real_body = body.strip()
 
-        if not self.mx.starts_with_command(real_body):
+        if not await self.mx.starts_with_command(real_body):
             for mod in self.mx.active_modules.values():
                 if mod.enabled and getattr(mod, "_is_ready", False):
                     try:
-                        await mod._matrix_message(self.mx, evt)
+                        await mod._matrix_message(self.mx.interface, evt)
                     except Exception:
                         logger.exception(f"Error in watcher in {mod.name}")
             return
 
         used_prefix = None
-        for p in self.mx.prefixes:
+        for p in await self.mx.get_prefix():
             if real_body.startswith(p):
                 used_prefix = p
                 break
@@ -119,10 +120,19 @@ class CallBack:
                         
                     func = mod.commands[cmd_name]
                     try:
-                        if not self.mx.security.is_owner(evt.sender):
+                        if not self.mx.interface.is_owner(evt.sender):
                             return
+                        
+                        token = self.mx.interface._current_event.set(evt)
+                        try:
+                            await func(self.mx.interface, evt)
+                        except Exception:
+                            logger.exception(f"Error in command {cmd_name}")
+                        finally:
+                            self.mx.interface._current_event.reset(token)
+                        
 
-                        await func(self.mx, evt)
+                        # await func(self.mx.interface, evt)
                     except Exception as e:
                         logger.exception(f"Error in command {cmd_name}")
                         await self.mx.client.send_text(evt.room_id, f"❌ Ошибка: {e}")
