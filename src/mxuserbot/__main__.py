@@ -1,3 +1,7 @@
+
+import contextvars
+
+
 import os
 import sys
 import time
@@ -28,11 +32,71 @@ from .core.loader import Loader
 from .core.security import SekaiSecurity 
 from ..database import Database, AsyncSessionWrapper  
 
+class MXBotInterface:
+    """Безопасная обертка для передачи в модули."""
+    def __init__(self, bot: 'MXUserBot'):
+        self._bot = bot
+        self.version = bot.version
+        
+        self._get_prefix_func = bot.get_prefix
+        self._log_to_room_func = bot.log_to_room
+        self._should_ignore_event_func = bot.should_ignore_event
+
+    _current_event = contextvars.ContextVar("current_event")
+
+    @property
+    def client(self) -> 'UserBotClient':
+        return self._bot.client
+    
+
+    async def answer(self, text: str, **kwargs):
+        """
+        Автоматически редактирует команду. 
+        Если нужно отправить новое сообщение вместо правки — передайте edit_id=None
+        """
+        from .core import utils
+        
+        try:
+            event = self._current_event.get()
+            room_id = event.room_id
+            if "edit_id" not in kwargs:
+                kwargs["edit_id"] = event.event_id
+        except LookupError:
+            room_id = kwargs.get("room_id")
+            if not room_id:
+                logger.error("answer() вызван без контекста и без room_id!")
+                return
+
+        return await utils.answer(self, event.room_id, text, **kwargs)
+    
 
 
+    @property
+    def active_modules(self) -> dict:
+        return self._bot.active_modules
 
+    def is_owner(self, sender_id: str) -> bool:
+        """
+        Динамически проверяет владельца через подсистему безопасности.
+        """
+        if self._bot.security:
+            return self._bot.security.is_owner(sender_id)
+        
+        return False
 
+    async def get_prefix(self) -> str:
+        return await self._get_prefix_func()
 
+    async def log_to_room(self, message: str):
+        await self._log_to_room_func(message)
+
+    def should_ignore_event(self, evt: MessageEvent) -> bool:
+        return self._should_ignore_event_func(evt)
+    
+
+    async def send_message(self, room_id, content, **kwargs):
+        """Проксирует отправку сырого контента в реальный клиент."""
+        return await self.client.send_message(room_id, content, **kwargs)
 
 
 class MXUserBot(Program):
@@ -48,7 +112,7 @@ class MXUserBot(Program):
             config_class=Config
         )
         self.client: Optional[Client] = None
-        self.db: Optional[Database] = None
+        self._db: Optional[Database] = None
         self.all_modules: Optional[Loader] = None
         self.security: Optional[SekaiSecurity] = None
         
@@ -58,8 +122,7 @@ class MXUserBot(Program):
         
         self.start_time: Optional[int] = None
         self.join_time: Optional[int] = None
-        self.prefixes: List[str] = ["!", "."]
-
+        self.interface = MXBotInterface(self) 
 
     async def _setup_log_room(self) -> str:
         """Проверяет конфиг на наличие комнаты логов, создает её при необходимости."""
@@ -117,12 +180,15 @@ class MXUserBot(Program):
                 self.log.error(f"Ошибка отправки лога в комнату: {e}")
 
 
-    def starts_with_command(
+    async def starts_with_command(
         self,
         body: str
     ) -> bool:
         """Проверяет, начинается ли сообщение с активного префикса."""
-        return body.startswith(tuple(self.prefixes))
+        return body.startswith(tuple(await self._db.get(
+            owner="core",
+            key="prefix"
+        )))
 
 
     def should_ignore_event(
@@ -188,7 +254,10 @@ class MXUserBot(Program):
         body: str
     ) -> str:
         """Извлекает аргументы команды (текст после команды)."""
-        for prefix in self.prefixes:
+        for prefix in self.db.get(
+            owner="core",
+            key="prefix"
+        ):
             if body.startswith(prefix):
                 cmd_part = body[len(prefix):]
                 parts = cmd_part.split(maxsplit=1)
@@ -200,12 +269,16 @@ class MXUserBot(Program):
         self
     ) -> None:
         """Загрузка префиксов из БД при старте."""
-        db_result = await self.db.get("set_prefix", "prefix", None)
+        db_result = await self._db.get("core", "prefix", None)
 
-        if db_result:
-            self.prefixes = db_result.value
+        if not db_result:
+            db_result= await self._db.set(
+                owner='core',
+                key="prefix",
+                value=["."]
+            )
             
-        logger.info(f"Загружены префиксы: {self.prefixes}")
+        logger.success(f"Загружены префиксы: {await self._db.get(owner='core', key='prefix')}")
 
 
     async def _setup_security(
@@ -245,27 +318,36 @@ class MXUserBot(Program):
 
         self.client.add_event_handler(
             EventType.ROOM_MEMBER, 
-            cb.memberevent_cb  # Было self.security.gate(cb.memberevent_cb)
+            cb.memberevent_cb
         )
 
         if hasattr(cb, "message_cb"):
             self.client.add_event_handler(
                 EventType.ROOM_MESSAGE, 
-                cb.message_cb  # Было self.security.gate(cb.message_cb)
+                cb.message_cb
             )
 
+    async def get_prefix(self) -> str:
+        """Безопасный геттер для получения основного префикса."""
+        if not hasattr(self, "_prefix_cache") or not self._prefix_cache:
+            db_result = await self._db.get("core", "prefix")
+            self._prefix_cache = db_result or ["."]
+            
+        return self._prefix_cache[0]
 
     async def setup_userbot(
         self
     ) -> None:
         try:
             session_wrapper = AsyncSessionWrapper() 
-            self.db = Database(session_wrapper) 
-            await self.db._sw.init_db()
+            self._db = Database(session_wrapper)
+            await self._db._sw.init_db()
 
-            self.config.db = self.db
+            self.config.db = self._db
             await self.config.load_from_db()
             conf = self.config["matrix"]
+
+
 
 
             db_path = os.path.join(os.getcwd(), "crypto.db")
@@ -279,21 +361,16 @@ class MXUserBot(Program):
             await PgCryptoStore.upgrade_table.upgrade(self.crypto_db)
             
             await PgCryptoStateStore.upgrade_table.upgrade(self.crypto_db)
-            # ----------------------------------------------
 
             self.state_store = PgCryptoStateStore(self.crypto_db)
             self.crypto_store = PgCryptoStore(conf["username"], "sekai_secret_pickle_key", self.crypto_db)
 
-
-
-            # 3. Инициализация Клиента
             self.client = UserBotClient(
                 api=HTTPAPI(base_url=conf["base_url"]),
                 state_store=self.state_store,
                 sync_store=self.crypto_store
             )
 
-            # 4. Логин
             self.log.info("Выполняю вход в Matrix...")
             await self.client.login(
                 identifier=conf["username"],
@@ -302,11 +379,9 @@ class MXUserBot(Program):
             )
             self.log.info(f"Вход выполнен как {conf['device_id']}!")
 
-            # 5. Настройка шифрования
             self.client.crypto = OlmMachine(self.client, self.crypto_store, self.state_store)
             self.client.crypto.allow_key_requests = True
 
-            # Защита от краша при старых/битых сообщениях To-Device
             self.client.remove_event_handler(EventType.TO_DEVICE_ENCRYPTED, self.client.crypto.handle_to_device_event)
             async def safe_handle_to_device(evt):
                 try:
@@ -320,7 +395,6 @@ class MXUserBot(Program):
                 self.log.info("Публикация ключей устройства в Matrix...")
                 await self.client.crypto.share_keys()
 
-            # Доверие своим устройствам
             async def trust_own_devices():
                 self.log.info("Синхронизация списка собственных устройств...")
                 try:
@@ -351,10 +425,10 @@ class MXUserBot(Program):
 
             await trust_own_devices()
 
-            # 6. Инициализация модулей бота
-            log_room = await self._setup_log_room()
-            self.all_modules = Loader(self.db)
-            await self.all_modules.register_all(self)
+
+            await self._setup_log_room()
+            self.all_modules = Loader(self._db)
+            await self.all_modules.register_all(self.interface)
             self.active_modules = self.all_modules.active_modules
 
             await self._setup_security()
