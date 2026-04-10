@@ -19,42 +19,32 @@ class MatrixModule(loader.Module):
     async def set_prefix(self, mx: Any, event: MessageEvent):
         """Установить новый префикс (только спец. символы)"""
         
-        if not event.content.body:
-            return
-
-        parts = event.content.body.split()
+        body = getattr(event.content, "body", "")
+        parts = body.split()
         
         if len(parts) < 2:
-            await mx.client.send_text(
-                room_id=event.room_id,
-                html=self.strings["error_no_args"]
-            )
-            return
+            return await mx.answer(self.strings.get("error_no_args"))
 
         new_prefix = parts[1]
 
         if len(new_prefix) != 1:
-            await mx.client.send_text(
-                room_id=event.room_id,
-                html=self.strings["error_too_long"]
-            )
-            return
+            return await mx.answer(self.strings.get("error_too_long"))
 
-        if new_prefix not in self.strings["allowed_symbols"]:
-            await mx.client.send_text(
-                room_id=event.room_id,
-                html=self.strings["error_set_prefix"].format(
+        allowed = self.strings.get("allowed_symbols")
+        if new_prefix not in allowed:
+            return await mx.answer(
+                self.strings.get("error_set_prefix").format(
                     new_prefix=new_prefix,
-                    allowed_symbols=self.strings["allowed_symbols"]
+                    allowed_symbols=allowed
                 )
             )
-            return
 
         query = [new_prefix]
         await self._set("prefix", query)
-        mx.prefixes = query
+        
+        if hasattr(mx, "prefixes"):
+            mx.prefixes = query
 
-        await mx.client.send_text(
-            room_id=event.room_id,
-            html=self.strings["success_set_prefix"].format(new_prefix=new_prefix)
+        await mx.answer(
+            self.strings.get("success_set_prefix").format(new_prefix=new_prefix)
         )
