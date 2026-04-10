@@ -16,14 +16,13 @@ class MatrixModule(loader.Module):
     @loader.command()
     async def mdl(self, mx, event):
         """!mdl <url> — скачивает и подгружает модуль"""
-        text = getattr(event.content, "body", "")
-        parts = text.split()
+        args = utils.get_args_raw(event.content.body)
         
-        if len(parts) < 2:
-            return await utils.answer(mx, event.room_id, self.strings["no_url"])
+        if not args:
+            return await mx.answer(self.strings.get("no_url"))
         
-        url = parts[1]
-        await utils.answer(mx, event.room_id, self.strings["downloading"])
+        url = args.strip()
+        await mx.answer(self.strings.get("downloading"))
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -41,7 +40,7 @@ class MatrixModule(loader.Module):
 
             await self.loader.register_module(path, mx, is_core=False)
 
-            await utils.answer(mx, event.room_id, self.strings["done"].format(name=filename))
+            await mx.answer(self.strings.get("done").format(name=filename))
 
         except Exception as e:
-            await utils.answer(mx, event.room_id, self.strings["error"].format(err=str(e)))
+            await mx.answer(self.strings.get("error").format(err=str(e)))
