@@ -118,7 +118,6 @@ class Module(ABC):
 
 
 
-# В вашем коде класс Config, измените метод __init__:
 class Config(BaseFileConfig):
     def __init__(self, path: str, base_path: str, db: Any = None) -> None:
         super().__init__(path, base_path)
