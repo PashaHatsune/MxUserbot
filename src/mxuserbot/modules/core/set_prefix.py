@@ -2,15 +2,19 @@ from typing import Any
 from mautrix.types import MessageEvent
 from ...core import loader
 
+class Meta:
+    name = "PrefixModule"
+    _cls_doc = "Управление префиксом команд юзербота."
+    version = "1.0.0"
+    tags = ["settings"]
+
 @loader.tds
-class MatrixModule(loader.Module):
+class PrefixModule(loader.Module):
     strings = {
-        "name": "PrefixModule",
-        "_cls_doc": "Управление префиксом",
         "allowed_symbols": "!\"./\\,;:@#$%^&*-_+=?|~",
-        "error_no_args": "<b>Ошибка:</b> вы не указали префикс.\nПример: <code>.set_prefix !</code>",
+        "error_no_args": "<b>Ошибка:</b> вы не указали префикс.<br>Пример: <code>.set_prefix !</code>",
         "error_too_long": "<b>Ошибка:</b> префикс должен состоять только из <b>одного</b> символа.",
-        "error_set_prefix": "<b>Ошибка:</b> символ <code>{new_prefix}</code> запрещен.\n"
+        "error_set_prefix": "<b>Ошибка:</b> символ <code>{new_prefix}</code> запрещен.<br>"
                             "Можно использовать только: <code>{allowed_symbols}</code>",
         "success_set_prefix": "✅ Префикс успешно изменен на: <code>{new_prefix}</code>"
     }
