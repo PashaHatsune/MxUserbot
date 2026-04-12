@@ -1,5 +1,5 @@
 ---
-<img width="1376" height="768" alt="999" src="https://github.com/user-attachments/assets/778dce44-de22-4f52-88c6-f56b3fa9d297" />
+<img width="1376" height="768" alt="result" src="https://github.com/user-attachments/assets/2e266925-c17b-49db-ac7b-1635cb3799b8" />
 
 Matrix-юзербот, созданный как переосмысление проекта [Hemppa](https://github.com/vranki/hemppa).
 
