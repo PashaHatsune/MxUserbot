@@ -9,6 +9,32 @@ from mautrix.util.formatter import parse_html
 from mautrix.types import EventID, EventType, Format, ImageInfo, MediaMessageEventContent, MessageType, RelatesTo, RoomID, TextMessageEventContent
 
 
+
+import platform
+import psutil
+import datetime
+
+def get_platform():
+    """Возвращает форматированную строку с данными о системе."""
+    os_info = f"{platform.system()} {platform.release()}"
+    hostname = platform.node()
+    ram = psutil.virtual_memory()
+    
+    used_ram = ram.used // 1024 // 1024
+    total_ram = ram.total // 1024 // 1024
+    ram_usage = f"{used_ram} / {total_ram} MB"
+    
+    cpu_usage = psutil.cpu_percent()
+
+    return (
+        f"<b>Сервер:</b> `{hostname}`<br>"
+        f"<b>ОС:</b> `{os_info}`<br>"
+        f"<b>Память:</b> `{ram_usage}`<br>"
+        f"<b>Нагрузка CPU:</b> `{cpu_usage}%`"
+    )
+
+
+
 def get_commands(cls):
     cmds = {}
     for attr_name in dir(cls):
@@ -118,32 +144,6 @@ async def send_image(
 
     extra = {"relates_to": relates_to} if relates_to else {}
 
-    # if is_enc:
-        # if not file_bytes and url:
-        #     async with aiohttp.ClientSession() as s:
-        #         async with s.get(url) as r:
-        #             file_bytes = await r.read()
-
-    #     enc_data, enc_info = encrypt_attachment(file_bytes)
-
-    #     mxc = await mx.upload_media(
-    #         enc_data,
-    #         mime_type="application/octet-stream",
-    #         filename=file_name,
-    #     )
-
-    #     enc_info.url = mxc
-
-    #     content_data = {
-    #         "msgtype": MessageType.IMAGE,
-    #         "body": plain_caption or file_name,
-    #         "filename": file_name,
-    #         "info": info,
-    #         "file": enc_info,
-    #         **extra,
-    #     }
-
-    # else:
     if file_bytes and not url:
         mxc = await mx.upload_media(
             file_bytes,
