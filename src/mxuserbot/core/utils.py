@@ -6,7 +6,7 @@ import aiohttp
 from mautrix.util.formatter import parse_html
 
 
-from mautrix.types import EventID, EventType, Format, ImageInfo, MediaMessageEventContent, MessageType, RelatesTo, RoomID, TextMessageEventContent
+from mautrix.types import EventID, EventType, Format, ImageInfo, MediaMessageEventContent, MessageEvent, MessageType, RelatesTo, RoomID, TextMessageEventContent
 
 
 
@@ -54,63 +54,72 @@ from mautrix.types import (
     TextMessageEventContent, Format, RelationType
 )
 from mautrix.util.formatter import parse_html
-
 async def answer(
-    mx,
-    room_id: RoomID,
+    mx,  # Это наш MXBotInterface
     text: str,
     html: bool = True,
-    msgtype: MessageType = MessageType.TEXT,
-    relates_to: RelatesTo | None = None,
-    edit_id: EventID | None = None,
-    **kwargs,
-) -> EventID:
-    # 1. Готовим текст без тегов для уведомлений
+    room_id: str = None,
+    event: MessageEvent = None,
+    edit_id: str | None = -1,
+    **kwargs
+) -> str:
+    ctx_event = None
+    if hasattr(mx, "_current_event"):
+        try:
+            ctx_event = mx._current_event.get()
+        except Exception:
+            pass
+
+
+    if not room_id:
+        if event:
+            room_id = event.room_id
+        elif ctx_event:
+            room_id = ctx_event.room_id
+    
+    if edit_id == -1:
+        if event:
+            edit_id = event.event_id
+        elif ctx_event:
+            edit_id = ctx_event.event_id
+        else:
+            edit_id = None
+
+    if not room_id:
+        mx.logger.error("utils.answer() вызван без room_id и без контекста!")
+        return ""
+
     plain_text = await parse_html(text) if html else text
-
+    
     if edit_id:
-        # --- ЛОГИКА РЕДАКТИРОВАНИЯ ---
         content = TextMessageEventContent(
-            msgtype=msgtype,
-            body=f" * {plain_text}" # Звездочка для старых клиентов
+            msgtype=MessageType.TEXT,
+            body=f" * {plain_text}",
+            relates_to=RelatesTo(rel_type=RelationType.REPLACE, event_id=edit_id)
         )
         if html:
             content.format = Format.HTML
             content.formatted_body = text
-
-        # Указываем, ЧТО мы редактируем
-        content.relates_to = RelatesTo(
-            rel_type=RelationType.REPLACE,
-            event_id=edit_id
+            
+        content.new_content = TextMessageEventContent(
+            msgtype=MessageType.TEXT,
+            body=plain_text,
+            format=Format.HTML if html else None,
+            formatted_body=text if html else None
         )
-
-        # Создаем объект нового контента (обязательно для Matrix)
-        new_content = TextMessageEventContent(
-            msgtype=msgtype,
-            body=plain_text
-        )
-        if html:
-            new_content.format = Format.HTML
-            new_content.formatted_body = text
-
-        # ПРАВИЛЬНОЕ ПРИСВОЕНИЕ (через атрибут, а не в __init__)
-        content.new_content = new_content
     else:
-        # --- ОБЫЧНАЯ ОТПРАВКА ---
         content = TextMessageEventContent(
-            msgtype=msgtype,
-            body=plain_text
+            msgtype=MessageType.TEXT,
+            body=plain_text,
+            format=Format.HTML if html else None,
+            formatted_body=text if html else None
         )
-        if html:
-            content.format = Format.HTML
-            content.formatted_body = text
 
-        if relates_to:
-            content.relates_to = relates_to
-        
-    if hasattr(mx, "send_message"):
-        return await mx.send_message(room_id, content, **kwargs)
-    return await mx.client.send_message(room_id, content, **kwargs)
+    allowed = ["timestamp", "txn_id"]
+    matrix_kwargs = {k: v for k, v in kwargs.items() if k in allowed}
+
+    return await mx.client.send_message(room_id, content, **matrix_kwargs)
+
 
 from mautrix.util import markdown
 from mautrix.crypto.attachments import encrypt_attachment
@@ -119,10 +128,43 @@ import io
 from PIL import Image
 from mautrix.types import ImageInfo # Убедись, что импортировано
 
+import aiohttp
+from mautrix.types import (
+    MessageType, EventType, MediaMessageEventContent, 
+    ImageInfo, Format
+)
+from mautrix.crypto.attachments import encrypt_attachment
+
+
+import aiohttp
+from typing import Union, Optional
+
+async def request(
+    url: str, 
+    method: str = "GET", 
+    return_type: str = "json", # json, text, bytes, или raw
+    params: Optional[dict] = None,
+    headers: Optional[dict] = None,
+    **kwargs
+) -> Union[dict, str, bytes, aiohttp.ClientResponse]:
+    """Универсальный сокращатель HTTP-запросов"""
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.request(method, url, params=params, headers=headers, **kwargs) as response:
+                if return_type == "json":
+                    return await response.json()
+                elif return_type == "text":
+                    return await response.text()
+                elif return_type == "bytes":
+                    return await response.read()
+                return response
+        except Exception as e:
+            return None
 
 async def send_image(
     mx,
-    room_id,
+    room_id: Union[str, MessageEvent], # Разрешаем принимать и строку, и событие
     url: str | None = None,
     file_bytes: bytes | None = None,
     info: ImageInfo | None = None,
@@ -132,48 +174,57 @@ async def send_image(
     html: bool = True,
     **kwargs,
 ):
-    if not url and not file_bytes:
-        raise ValueError("Нужно указать либо url, либо file_bytes")
+    
+
+
+    
+    if not isinstance(room_id, str):
+        room_id = room_id.room_id
+
+    if isinstance(url, bytes) and file_bytes is None:
+        file_bytes = url
+        url = None
+
+    if not file_bytes and url:
+        if isinstance(url, str) and url.startswith("http"):
+            # Используем твою новую функцию request, которую мы обсуждали!
+            file_bytes = await request(url, return_type="bytes")
+        elif isinstance(url, str) and url.startswith("mxc://"):
+            file_bytes = await mx.client.download_media(url)
+
+    if not file_bytes:
+        raise ValueError("Не удалось получить байты изображения")
 
     file_name = file_name or "image.png"
+    mime_type = info.mimetype if info else "image/png"
+    
     is_enc = await mx.client.state_store.is_encrypted(room_id)
-
-    plain_caption = None
-    if caption:
-        plain_caption = await parse_html(caption) if html else caption
-
-    extra = {"relates_to": relates_to} if relates_to else {}
-
-    if file_bytes and not url:
-        mxc = await mx.upload_media(
-            file_bytes,
-            mime_type="image/png",
-            filename=file_name,
-        )
-    else:
-        mxc = url
-
-    content_data = {
-        "msgtype": MessageType.IMAGE,
-        "body": plain_caption or file_name,
-        "filename": file_name,
-        "info": info,
-        "url": mxc,
-        **extra,
-    }
-
-    if caption and html:
-        content_data["format"] = Format.HTML
-        content_data["formatted_body"] = caption
-
-    content = MediaMessageEventContent(**content_data)
-
-    return await mx.client.send_message_event(
-        room_id,
-        EventType.ROOM_MESSAGE,
-        content,
-        **kwargs,
+    
+    content = MediaMessageEventContent(
+        msgtype=MessageType.IMAGE,
+        body=file_name,
+        info=info or ImageInfo(mimetype=mime_type),
     )
+
+    if is_enc:
+        encrypted_data, file_info = encrypt_attachment(file_bytes)
+        mxc_url = await mx.client.upload_media(encrypted_data, mime_type=mime_type)
+        file_info.url = mxc_url
+        content.file = file_info
+    else:
+        mxc_url = await mx.client.upload_media(file_bytes, mime_type=mime_type)
+        content.url = mxc_url
+
+    if caption:
+        content.body = caption
+        if html:
+            content.format = Format.HTML
+            content.formatted_body = caption
+
+    if relates_to:
+        content.relates_to = relates_to
+
+    return await mx.client.send_message_event(room_id, EventType.ROOM_MESSAGE, content, **kwargs)
 
 
 
@@ -184,6 +235,7 @@ from typing import Optional
 
 
 RPC_NAMESPACE = "com.ip-logger.msc4320.rpc"
+from typing import Optional, Union
 
 async def set_rpc_media(
     mx,
@@ -192,21 +244,27 @@ async def set_rpc_media(
     track: str,
     length: Optional[int] = None,
     complete: Optional[int] = None,
-    cover_art: Optional[str] = None,
+    cover_art: Optional[Union[str, bytes]] = None, # Теперь принимает и байты, и ссылки
     player: Optional[str] = None,
     streaming_link: Optional[str] = None
 ):
     """
-    Установить статус 'Слушает' (m.rpc.media) со всеми аргументами MSC4320.
-    :param artist: Исполнитель (обязательно)
-    :param album: Альбом (обязательно)
-    :param track: Название трека (обязательно)
-    :param length: Общая длина трека в секундах
-    :param complete: Сколько секунд уже прослушано
-    :param cover_art: Ссылка MXC на обложку альбома
-    :param player: Название плеера (например, Spotify)
-    :param streaming_link: Прямая ссылка на стриминг
+    Установить статус 'Слушает' (m.rpc.media). 
+    Если cover_art — это URL или байты, она будет автоматически загружена в Matrix.
     """
+    
+    if cover_art:
+        if isinstance(cover_art, bytes):
+            mxc = await mx.client.upload_media(cover_art)
+            cover_art = str(mxc)
+            
+        elif isinstance(cover_art, str) and cover_art.startswith(("http://", "https://")):
+            img_bytes = await request(cover_art, return_type="bytes")
+            if img_bytes:
+                mxc = await mx.client.upload_media(img_bytes)
+                cover_art = str(mxc)
+            else:
+                cover_art = None
     data = {
         "type": f"{RPC_NAMESPACE}.media",
         "artist": artist,
@@ -219,13 +277,17 @@ async def set_rpc_media(
         if length is not None: data["progress"]["length"] = length
         if complete is not None: data["progress"]["complete"] = complete
     
-    if cover_art: data["cover_art"] = cover_art
-    if player: data["player"] = player
-    if streaming_link: data["streaming_link"] = streaming_link
+    if cover_art: 
+        data["cover_art"] = cover_art
+        
+    if player: 
+        data["player"] = player
+        
+    if streaming_link: 
+        data["streaming_link"] = streaming_link
 
     endpoint = f"_matrix/client/v3/profile/{mx.client.mxid}/{RPC_NAMESPACE}"
     return await mx.client.api.request(Method.PUT, endpoint, content={RPC_NAMESPACE: data})
-
 
 async def set_rpc_activity(
     mx,
@@ -388,40 +450,3 @@ def get_dir(mod: str) -> str:
     :return: Directory of given module
     """
     return os.path.abspath(os.path.dirname(os.path.abspath(mod)))
-
-
-
-
-
-# # Throws exception if event sender is not a room admin
-# def must_be_admin(self, room, event, power_level=50):
-#     if not self.is_admin(room, event, power_level=power_level):
-#         raise CommandRequiresAdmin
-
-
-# # Throws exception if event sender is not a bot owner
-# def must_be_owner(self, event):
-#     if not is_owner(event):
-#         raise CommandRequiresOwner
-
-
-# # Returns true if event's sender has PL50 or more in the room event was sent in,
-# # or is bot owner
-# def is_admin(self, room, event, power_level=50):
-#     if is_owner(event):
-#         return True
-#     if event.sender not in room.power_levels.users:
-#         return False
-#     return room.power_levels.users[event.sender] >= power_level
-
-
-# # Checks if this event should be ignored by bot, including custom property
-# def should_ignore_event(self, event):
-#     return "org.vranki.hemppa.ignore" in event.source['content']
-
-
-
-
-
-# def clear_modules(self):
-#     self.modules = dict()
