@@ -108,7 +108,7 @@ class MXUserBot(Program):
             name='sekai-user-bot',
             description="Sekai Userbot",
             command="-",
-            version="1.0.0",
+            version="0.5 | ALPHA",
             config_class=Config
         )
         self.client: Optional[Client] = None
@@ -156,7 +156,7 @@ class MXUserBot(Program):
         await self.config.update_db_key("matrix.log_room_id", str(new_room_id))
 
 
-        await self.client.send_text(new_room_id, "✅ Комната логов успешно инициализирована.")
+        await utils.answer(self.client, new_room_id, "✅ | Комната логов успешно инициализирована.")
 
 
         self.config["matrix"]["log_room_id"] = str(new_room_id)
@@ -231,7 +231,7 @@ class MXUserBot(Program):
         self
     ) -> None:
         """Настройка форматирования и обработчиков для Loguru."""
-        logging.basicConfig(handlers=[InterceptHandler()], level="INFO", force=True)
+        logging.basicConfig(handlers=[InterceptHandler()], level="WARNING", force=True)
         logger.remove()
         
         log_format = (
@@ -356,7 +356,7 @@ class MXUserBot(Program):
             await self.config.load_from_db()
             conf = self.config["matrix"]
 
-            db_path = os.path.join(os.getcwd(), "crypto.db")
+            db_path = os.path.join(os.getcwd(), "sekai.db")
             self.log.info(f"Подключение к базе ключей E2EE: {db_path}")
             
             self.crypto_db = MautrixDatabase.create(f"sqlite:///{db_path}")
@@ -447,19 +447,23 @@ class MXUserBot(Program):
 
 
             await self._setup_log_room()
+            await self._setup_security()
             self.all_modules = Loader(self._db)
             await self.all_modules.register_all(self.interface)
             self.active_modules = self.all_modules.active_modules
 
-            await self._setup_security()
+            
             await self._load_prefixes()
             await self._register_handlers()
 
             import datetime
-            await self.log_to_room(f"🚀 **Sekai UserBot (SQLite Crypto)** запущен!\n"
-                                f"Версия: `{self.version}`\n"
-                                f"Время: `{datetime.datetime.now().strftime('%H:%M:%S')}`")
-            
+            stats = utils.get_platform()
+            await self.log_to_room(
+                f"🚀 | <b>MXUserBot</b> запущен!<br>"
+                f"<b>Версия:</b> `{self.version}`<br>"
+                f"<b>Время:</b> `{datetime.datetime.now().strftime('%H:%M:%S')}`<br>"
+                f"{stats}<br>"
+            )
             await self._cleanup_empty_rooms()
             self.start_time = int(time.time() * 1000)
 
