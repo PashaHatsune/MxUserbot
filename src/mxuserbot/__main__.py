@@ -50,6 +50,12 @@ class MXBotInterface:
         return self._bot.client
     
 
+
+    @property
+    def sas_verifier(self) -> 'BotSASVerification':
+        return self._bot.sas_verifier
+    
+
     @property
     def active_modules(self) -> dict:
         return self._bot.active_modules
@@ -327,159 +333,95 @@ class MXUserBot(Program):
         db_result = await self._db.get("core", "prefix")
         return db_result[0]
 
-    async def setup_userbot(
-        self
-    ) -> None:
-        try:
-            session_wrapper = AsyncSessionWrapper() 
-            self._db = Database(session_wrapper)
-            await self._db._sw.init_db()
-            self.config.db = self._db
-            await self.config.load_from_db()
-            conf = self.config["matrix"]
+    async def setup_userbot(self) -> None:
+            try:
+                session_wrapper = AsyncSessionWrapper() 
+                self._db = Database(session_wrapper)
+                await self._db._sw.init_db()
+                self.config.db = self._db
+                await self.config.load_from_db()
+                conf = self.config["matrix"]
 
-            db_path = os.path.join(os.getcwd(), "sekai.db")
-            self.crypto_db = MautrixDatabase.create(f"sqlite:///{db_path}")
-            await self.crypto_db.start() 
-            await PgCryptoStore.upgrade_table.upgrade(self.crypto_db)
-            await PgCryptoStateStore.upgrade_table.upgrade(self.crypto_db)
+                db_path = os.path.join(os.getcwd(), "sekai.db")
+                self.crypto_db = MautrixDatabase.create(f"sqlite:///{db_path}")
+                await self.crypto_db.start() 
+                await PgCryptoStore.upgrade_table.upgrade(self.crypto_db)
+                await PgCryptoStateStore.upgrade_table.upgrade(self.crypto_db)
 
-            self.state_store = PgCryptoStateStore(self.crypto_db)
-            self.crypto_store = PgCryptoStore(conf["username"], "sekai_secret_pickle_key", self.crypto_db)
+                self.state_store = PgCryptoStateStore(self.crypto_db)
+                self.crypto_store = PgCryptoStore(conf["username"], "sekai_secret_pickle_key", self.crypto_db)
 
-            self.client = Client(
-                api=HTTPAPI(base_url=conf["base_url"]),
-                state_store=self.state_store,
-                sync_store=self.crypto_store
-            )
-
-            if conf.get("access_token"):
-                self.client.api.token = conf["access_token"]
-                self.client.mxid = conf["username"]
-                self.client.device_id = conf["device_id"]
-            else:
-                await self.client.login(
-                    identifier=conf["username"],
-                    password=conf["password"],
-                    device_id=conf["device_id"],
-                    initial_device_display_name="MXUserBot"
+                self.client = Client(
+                    api=HTTPAPI(base_url=conf["base_url"]),
+                    state_store=self.state_store,
+                    sync_store=self.crypto_store
                 )
-                await self.config.update_db_key("matrix.access_token", self.client.api.token)
-                await self.config.update_db_key("matrix.device_id", self.client.device_id)
-                self.config.save()
 
-            self.client.crypto = OlmMachine(self.client, self.crypto_store, self.state_store)
-            
-            self.client.crypto.allow_key_requests = True
-            
-            await self.client.crypto.load()
+                if conf.get("access_token"):
+                    self.client.api.token = conf["access_token"]
+                    self.client.mxid = conf["username"]
+                    self.client.device_id = conf["device_id"]
+                else:
+                    await self.client.login(
+                        identifier=conf["username"],
+                        password=conf["password"],
+                        device_id=conf["device_id"],
+                        initial_device_display_name="MXUserBot"
+                    )
+                    await self.config.update_db_key("matrix.access_token", self.client.api.token)
+                    await self.config.update_db_key("matrix.device_id", self.client.device_id)
+                    self.config.save()
 
-            sas_verifier = BotSASVerification(self.client)
-            real_decrypt_method = self.client.crypto._decrypt_olm_event
+                self.client.crypto = OlmMachine(self.client, self.crypto_store, self.state_store)
+                # self.client.crypto.send_keys_min_trust = TrustState.VERIFIED
+                self.client.crypto.allow_key_requests = True
+                await self.client.crypto.load()
 
-            async def hooked_decrypt(evt):
-                decrypted = await real_decrypt_method(evt)
-                if decrypted:
-                    t = decrypted.type.t if hasattr(decrypted.type, "t") else str(decrypted.type)
-                    if "m.key.verification" in t:
-                        asyncio.create_task(sas_verifier.handle_decrypted_event(decrypted))
-                return decrypted
+                self.sas_verifier = BotSASVerification(self.client)
+                
+                original_decrypt = self.client.crypto._decrypt_olm_event
 
-            self.client.crypto._decrypt_olm_event = hooked_decrypt
+                async def hooked_decrypt(evt):
+                    decrypted = await original_decrypt(evt)
+                    if decrypted:
+                        t = decrypted.type.t if hasattr(decrypted.type, "t") else str(decrypted.type)
+                        if "m.key.verification" in t:
+                            asyncio.create_task(self.sas_verifier.handle_decrypted_event(decrypted))
+                    return decrypted
 
-            if not await self.crypto_store.get_device_id():
-                await self.crypto_store.put_device_id(self.client.device_id)
-                await self.client.crypto.share_keys()
+                self.client.crypto._decrypt_olm_event = hooked_decrypt
 
-            # 4. Авто-траст (опционально)
-            # await self.trust_own_devices() 
+                if not await self.crypto_store.get_device_id():
+                    await self.crypto_store.put_device_id(self.client.device_id)
+                    await self.client.crypto.share_keys()
 
-            self.log.success("UserBot E2EE инициализирован. Запуск sync...")
-            # self.client.crypto = OlmMachine(self.client, self.crypto_store, self.state_store)
-            # self.client.crypto.allow_key_requests = True
+                await self._setup_log_room()
+                await self._setup_security()
+                
+                self.all_modules = Loader(self._db)
+                await self.all_modules.register_all(self.interface)
+                self.active_modules = self.all_modules.active_modules
 
-            # self.client.remove_event_handler(EventType.TO_DEVICE_ENCRYPTED, self.client.crypto.handle_to_device_event)
-            # async def safe_handle_to_device(evt):
-            #     try:
-            #         await self.client.crypto.handle_to_device_event(evt)
-            #     except Exception as e:
-            #         self.log.warning(f"Пропущено To-Device сообщение (битый ключ): {e}")
-            # self.client.add_event_handler(EventType.TO_DEVICE_ENCRYPTED, safe_handle_to_device)
-            
-            # await self.client.crypto.load()
-            # if not await self.crypto_store.get_device_id():
-            #     await self.crypto_store.put_device_id(self.client.device_id)
-            #     self.log.info("Публикация ключей устройства в Matrix...")
-            #     await self.client.crypto.share_keys()
+                await self._load_prefixes()
+                await self._register_handlers()
 
-            # async def trust_own_devices():
-            #     self.log.info("Синхронизация списка собственных устройств...")
-            #     try:
-            #         resp = await self.client.api.request(Method.GET, "/_matrix/client/v3/devices")
-            #         my_devices = resp.get("devices",[])
-            #     except Exception as e:
-            #         self.log.error(f"Не удалось получить список устройств: {e}")
-            #         return
+                import datetime
+                stats = utils.get_platform()
+                await self.log_to_room(
+                    f"🚀 | <b>MXUserBot</b> запущен!<br>"
+                    f"<b>Версия:</b> `{self.version}`<br>"
+                    f"<b>Время:</b> `{datetime.datetime.now().strftime('%H:%M:%S')}`<br>"
+                    f"{stats}<br>"
+                )
+                
+                await self._cleanup_empty_rooms()
+                self.start_time = int(time.time() * 1000)
 
-            #     cached_devices = await self.crypto_store.get_devices(self.client.mxid) or {}
-            #     updated_count = 0
-            #     for dev in my_devices:
-            #         d_id = dev.get("device_id")
-            #         if not d_id or d_id == self.client.device_id: continue
-                    
-            #         identity = await self.client.crypto.get_or_fetch_device(self.client.mxid, d_id)
-            #         if identity and identity.trust != TrustState.VERIFIED:
-            #             identity.trust = TrustState.VERIFIED
-            #             cached_devices[d_id] = identity
-            #             updated_count += 1
-            #             self.log.debug(f"Устройство {d_id} ({dev.get('display_name', 'Unknown')}) доверено.")
+                self.log.success("UserBot E2EE инициализирован. Запуск sync...")
+                await self.client.start(filter_data=None)
 
-            #     if updated_count > 0:
-            #         await self.crypto_store.put_devices(self.client.mxid, cached_devices)
-            #         self.log.info(f"Успешно верифицировано новых устройств: {updated_count}")
-            #     else:
-            #         self.log.info("Все устройства уже верифицированы.")
-
-            # await trust_own_devices()
-
-
-            await self._setup_log_room()
-            await self._setup_security()
-            self.all_modules = Loader(self._db)
-            await self.all_modules.register_all(self.interface)
-            self.active_modules = self.all_modules.active_modules
-
-            
-            await self._load_prefixes()
-            await self._register_handlers()
-
-            import datetime
-            stats = utils.get_platform()
-            await self.log_to_room(
-                f"🚀 | <b>MXUserBot</b> запущен!<br>"
-                f"<b>Версия:</b> `{self.version}`<br>"
-                f"<b>Время:</b> `{datetime.datetime.now().strftime('%H:%M:%S')}`<br>"
-                f"{stats}<br>"
-            )
-            await self._cleanup_empty_rooms()
-            self.start_time = int(time.time() * 1000)
-
-            self.log.info("Запуск синхронизации Matrix...")
-            
-            sync_filter = await self.client.create_filter({
-                "room": {
-                    "timeline": {
-                        "limit": 1
-                    },
-                    "state": {
-                        "lazy_load_members": True
-                    }
-                }
-            })
-
-            await self.client.start(filter_data=None)
-        except Exception as e:
-            self.log.exception(f"Критическая ошибка при запуске бота: {e}")
+            except Exception as e:
+                self.log.exception(f"Критическая ошибка при запуске бота: {e}")
 
 import traceback
 if __name__ == "__main__":
