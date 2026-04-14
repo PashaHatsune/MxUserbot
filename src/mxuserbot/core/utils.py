@@ -54,8 +54,138 @@ from mautrix.types import (
     TextMessageEventContent, Format, RelationType
 )
 from mautrix.util.formatter import parse_html
+
+
+
+
+
+from mautrix.util import markdown
+from mautrix.crypto.attachments import encrypt_attachment
+
+import io
+from PIL import Image
+from mautrix.types import ImageInfo 
+
+import aiohttp
+from mautrix.types import (
+    MessageType, EventType, MediaMessageEventContent, 
+    ImageInfo, Format
+)
+from mautrix.crypto.attachments import encrypt_attachment
+
+import asyncio
+from mautrix.types import EncryptedEvent, MessageEvent, TextMessageEventContent, MessageType, RelatesTo, RelationType, Format
+
+async def decrypt_event(mx, event_to_decrypt: EncryptedEvent, context_event: MessageEvent = None) -> str | None:
+    """
+    Универсальная утилита для дешифровки события.
+    Если ключа нет: запрашивает его в фоне.
+    Если передан context_event, бот автоматически ответит пользователю в чат.
+    Возвращает строку (текст) или None.
+    """
+    try:
+        decrypted = await mx.client.crypto.decrypt_megolm_event(event_to_decrypt)
+        return decrypted.content.body
+    except Exception as de:
+        if "no session" in str(de).lower() or "SessionNotFound" in str(type(de)):
+            users_to_ask = {mx.client.mxid, event_to_decrypt.sender}
+            from_devices = {}
+            
+            for user_id in users_to_ask:
+                devices = await mx.client.crypto.crypto_store.get_devices(user_id)
+                if devices:
+                    from_devices[user_id] = {
+                        dev_id: dev.identity_key 
+                        for dev_id, dev in devices.items()
+                    }
+
+            if from_devices:
+                if context_event:
+                    await answer(mx, text="🔑 <b>У бота нет ключа для этого сообщения.</b>\nЗапрос отправлен твоим устройствам. Подожди 5-10 секунд и напиши команду заново (твой телефон должен быть онлайн).", event=context_event)
+                
+                asyncio.create_task(mx.client.crypto.request_room_key(
+                    room_id=event_to_decrypt.room_id,
+                    sender_key=event_to_decrypt.content.sender_key,
+                    session_id=event_to_decrypt.content.session_id,
+                    from_devices=from_devices
+                ))
+            else:
+                if context_event:
+                    await answer(mx, text="❌ <b>Ключ отсутствует</b>, и не у кого его запросить.", event=context_event)
+            return None
+        
+        if context_event:
+            await answer(mx, text=f"❌ <b>Ошибка дешифровки:</b> {de}", event=context_event)
+        return None
+
+async def get_reply_text(mx, event: MessageEvent) -> str | None | bool:
+    """
+    Извлекает текст из реплая (с авто-дешифровкой и обработкой ключей).
+    Возвращает:
+    - str (текст), если всё успешно
+    - False, если реплая нет
+    - None, если ключа нет или произошла ошибка (бот УЖЕ ответил об этом в чат)
+    """
+    reply_to = getattr(event.content, "relates_to", None)
+    if not reply_to or getattr(reply_to, "in_reply_to", None) is None:
+        return False
+        
+    try:
+        replied_event = await mx.client.get_event(event.room_id, reply_to.in_reply_to.event_id)
+    except Exception as e:
+        await answer(mx, text=f"❌ <b>Не удалось скачать сообщение:</b> {e}", event=event)
+        return None
+        
+    if isinstance(replied_event, EncryptedEvent):
+        return await decrypt_event(mx, replied_event, context_event=event)
+    else:
+        return getattr(replied_event.content, "body", "")
+
+
+async def get_args_raw(mx, event) -> str:
+    """Извлечение аргументов команды. Теперь использует нашу новую дешифровку (в тихом режиме)."""
+    cmd_text = ""
+    if isinstance(event, str):
+        cmd_text = event
+    elif hasattr(event, "content") and hasattr(event.content, "body"):
+        cmd_text = event.content.body
+    elif hasattr(event, "message"):
+        cmd_text = event.message
+
+    cmd_args = ""
+    if cmd_text:
+        cmd_text = cmd_text.strip()
+        parts = cmd_text.split(maxsplit=1)
+        cmd_args = parts[1].strip() if len(parts) > 1 else ""
+
+    args_words_count = len(cmd_args.split())
+
+    if args_words_count > 1:
+        return cmd_args
+
+    try:
+        relates = getattr(event.content, "relates_to", None) or getattr(event.content, "_relates_to", None)
+        if relates and getattr(relates, "in_reply_to", None):
+            replied_event = await mx.client.get_event(room_id=event.room_id, event_id=relates.in_reply_to.event_id)
+
+            if isinstance(replied_event, EncryptedEvent):
+                reply_text = await decrypt_event(mx, replied_event, context_event=None)
+            else:
+                reply_text = getattr(replied_event.content, "body", None)
+            
+            if reply_text:
+                reply_text = reply_text.strip()
+                if cmd_args:
+                    return f"{cmd_args} {reply_text}"
+                return reply_text
+    except Exception:
+        pass
+
+    return cmd_args
+
+
 async def answer(
-    mx,  # Это наш MXBotInterface
+    mx,
     text: str,
     html: bool = True,
     room_id: str = None,
@@ -69,7 +199,6 @@ async def answer(
             ctx_event = mx._current_event.get()
         except Exception:
             pass
-
 
     if not room_id:
         if event:
@@ -115,25 +244,10 @@ async def answer(
             formatted_body=text if html else None
         )
 
-    allowed = ["timestamp", "txn_id"]
+    allowed =["timestamp", "txn_id"]
     matrix_kwargs = {k: v for k, v in kwargs.items() if k in allowed}
 
     return await mx.client.send_message(room_id, content, **matrix_kwargs)
-
-
-from mautrix.util import markdown
-from mautrix.crypto.attachments import encrypt_attachment
-
-import io
-from PIL import Image
-from mautrix.types import ImageInfo # Убедись, что импортировано
-
-import aiohttp
-from mautrix.types import (
-    MessageType, EventType, MediaMessageEventContent, 
-    ImageInfo, Format
-)
-from mautrix.crypto.attachments import encrypt_attachment
 
 
 import aiohttp
@@ -356,66 +470,6 @@ import os
 
 from mautrix.types import EncryptedEvent
 
-async def get_args_raw(mx, event) -> str:
-    """
-    1. Если в команде есть текст помимо первого аргумента -> возвращает аргументы (игнорирует реплай).
-    2. Если в команде только 1 аргумент (или пусто) и есть реплай -> склеивает аргумент и текст реплая.
-    3. Иначе -> возвращает аргументы команды.
-    """
-    cmd_text = ""
-    if isinstance(event, str):
-        cmd_text = event
-    elif hasattr(event, "content") and hasattr(event.content, "body"):
-        cmd_text = event.content.body
-    elif hasattr(event, "message"):
-        cmd_text = event.message
-
-    cmd_args = ""
-    if cmd_text:
-        cmd_text = cmd_text.strip()
-        parts = cmd_text.split(maxsplit=1)
-        cmd_args = parts[1].strip() if len(parts) > 1 else ""
-
-    args_words_count = len(cmd_args.split())
-
-    if args_words_count > 1:
-        return cmd_args
-
-    try:
-        relates = (
-            getattr(event.content, "relates_to", None)
-            or getattr(event.content, "_relates_to", None)
-        )
-
-        if relates and getattr(relates, "in_reply_to", None):
-            reply_id = relates.in_reply_to.event_id
-
-            replied_event = await mx.client.get_event(
-                room_id=event.room_id,
-                event_id=reply_id
-            )
-
-            if isinstance(replied_event, EncryptedEvent):
-                try:
-                    replied_event = await mx.client.crypto.decrypt_megolm_event(
-                        replied_event
-                    )
-                except Exception:
-                    pass
-
-            reply_text = getattr(replied_event.content, "body", None)
-            if reply_text:
-                reply_text = reply_text.strip()
-                
-                if cmd_args:
-                    return f"{cmd_args} {reply_text}"
-                
-                return reply_text
-
-    except Exception:
-        pass
-
-    return cmd_args
 
 
 def escape_html(text: str, /) -> str:  # sourcery skip
