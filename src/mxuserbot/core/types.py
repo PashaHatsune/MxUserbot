@@ -5,37 +5,44 @@ import hashlib
 import json
 import logging
 import sys
-from abc import ABC
 import time
+import uuid
+from abc import ABC
 from typing import Any, AsyncGenerator, Dict
 
 import aiohttp
 from loguru import logger
-from olm.sas import Sas
-from ruamel.yaml.comments import CommentedMap
-
 from mautrix.client import Client
 from mautrix.client.state_store import MemoryStateStore as BaseMemoryStateStore
 from mautrix.crypto.attachments import encrypt_attachment
 from mautrix.crypto.store import MemoryCryptoStore as BaseMemoryCryptoStore
 from mautrix.types import (
     CrossSigningUsage,
-    EventID,
     EventType,
-    Format,
-    ImageInfo,
-    MediaMessageEventContent,
-    MessageType,
-    RelatesTo,
-    RoomID,
     TOFUSigningKey,
     ToDeviceEvent,
     TrustState,
 )
-from mautrix.util.config import BaseFileConfig, RecursiveDict, ConfigUpdateHelper
+from mautrix.util.config import BaseFileConfig, ConfigUpdateHelper, RecursiveDict
+from olm.sas import Sas
+from ruamel.yaml.comments import CommentedMap
 
-from ...settings import config
 from . import utils
+
+
+EMOJI_LIST =[
+    "Dog", "Cat", "Lion", "Horse", "Unicorn", "Pig", "Elephant", 
+    "Rabbit", "Panda", "Rooster", "Penguin", "Turtle", "Fish", 
+    "Octopus", "Butterfly", "Flower", "Tree", "Cactus", "Mushroom", 
+    "Globe", "Moon", "Cloud", "Fire", "Banana", "Apple", "Strawberry", 
+    "Corn", "Pizza", "Cake", "Heart", "Smiley", "Robot", "Hat", 
+    "Glasses", "Spanner", "Santa", "Thumbs Up", "Umbrella", "Hourglass", 
+    "Clock", "Gift", "Light Bulb", "Book", "Pencil", "Paperclip", 
+    "Scissors", "Lock", "Key", "Hammer", "Telephone", "Flag", 
+    "Train", "Bicycle", "Aeroplane", "Rocket", "Trophy", "Ball", 
+    "Guitar", "Trumpet", "Bell", "Anchor", "Headphones", "Folder", "Pin"
+]
+
 
 class ModuleConfig:
     def __init__(self, getter_func, setter_func, **defaults):
@@ -45,7 +52,6 @@ class ModuleConfig:
 
     async def _load_from_db(self):
         for key in self._cache.keys():
-            # Используем переданную безопасную функцию
             val = await self._getter(key, self._cache[key])
             self._cache[key] = val
 
@@ -54,8 +60,8 @@ class ModuleConfig:
 
     def __setitem__(self, key, value):
         self._cache[key] = value
-        # Используем переданную безопасную функцию
         asyncio.create_task(self._setter(key, value))
+
 
 class Module(ABC):
     __origin__ = "<unknown>"
@@ -68,10 +74,8 @@ class Module(ABC):
     async def _internal_init(self, name, db, loader_or_dict, is_core: bool):
         self.name = name
         self._is_core = is_core
-        self.name = name
         self.enabled = True
         self.logger = logger.bind(name=self.name)
-        self._is_core = is_core
         
         if is_core:
             self._db = db
@@ -80,11 +84,10 @@ class Module(ABC):
         else:
             self._db = None
             self.loader = None
-            self.allmodules = loader_or_dict # Это просто dict
+            self.allmodules = loader_or_dict
 
         self._get = db.get
         self._set = db.set
-
 
         self.strings = getattr(self.__class__, "strings", {}).copy()
         self.friendly_name = self.strings.get("name") or self.config.get("name") or self.__class__.__name__
@@ -99,8 +102,7 @@ class Module(ABC):
             self._commands[cmd_name] = getattr(self, func.__name__)
 
     def _help(self):
-        return self.strings.get("_cls_doc", "Описание отсутствует")
-
+        return self.strings.get("_cls_doc", "No description available")
 
     @property
     def commands(self):
@@ -112,17 +114,20 @@ class Module(ABC):
     async def _set(self, key, value): 
         return await self._db.set(self.name, key, value)
 
-    async def _matrix_start(self, mx): pass
-    async def _matrix_message(self, mx, event): pass
-    async def _matrix_member(self, mx, event): pass
+    async def _matrix_start(self, mx):
+        pass
 
+    async def _matrix_message(self, mx, event):
+        pass
 
+    async def _matrix_member(self, mx, event):
+        pass
 
+    def _matrix_stop(self, mx):
+        pass
 
-    def _matrix_stop(self, mx): pass
-    async def _matrix_poll(self, mx, pollcount): pass
-    
-
+    async def _matrix_poll(self, mx, pollcount):
+        pass
 
 
 class Config(BaseFileConfig):
@@ -130,15 +135,16 @@ class Config(BaseFileConfig):
         super().__init__(path, base_path)
         self.db = db
         self.owner = "core"
+        
         self._default_values = {
             "matrix": {
-                "base_url": config.matrix_config.base_url,
-                "username": config.matrix_config.owner,
-                "password": config.matrix_config.password.get_secret_value(),
+                "base_url": "",
+                "username": "",
+                "password": "",
                 "device_id": "",
                 "access_token": "",
                 "log_room_id": "",
-                "owner": config.matrix_config.owner
+                "owner": ""
             },
             "logging": {"version": 1}
         }
@@ -148,15 +154,20 @@ class Config(BaseFileConfig):
     def load_base(self) -> RecursiveDict:
         return RecursiveDict(self._default_values, CommentedMap)
 
-    def load(self) -> None: pass
-    def save(self) -> None: pass
+    def load(self) -> None:
+        pass
+
+    def save(self) -> None:
+        pass
 
     def do_update(self, helper: ConfigUpdateHelper) -> None:
         helper.copy("matrix")
         helper.copy("logging")
 
     async def load_from_db(self) -> None:
-        if not self.db: return
+        if not self.db: 
+            return
+
         async def fetch_recursive(data_dict: dict, prefix=""):
             for key, value in data_dict.items():
                 full_key = f"{prefix}{key}"
@@ -166,6 +177,7 @@ class Config(BaseFileConfig):
                     db_value = await self.db.get(self.owner, full_key)
                     if db_value is not None:
                         self[full_key] = db_value
+
         await fetch_recursive(self._default_values)
 
     async def update_db_key(self, key: str, value: Any) -> None:
@@ -174,12 +186,7 @@ class Config(BaseFileConfig):
             await self.db.set(self.owner, key, value)
 
 
-
-
-
-
 class InterceptHandler(logging.Handler):
-    """Перехватчик стандартных логов Python и перенаправление их в Loguru."""
     def emit(self, record: logging.LogRecord) -> None:
         try:
             level = logger.level(record.levelname).name
@@ -194,53 +201,33 @@ class InterceptHandler(logging.Handler):
         logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
 
 
-
 class MemoryCryptoStore(BaseMemoryCryptoStore):
-    """Исправленное хранилище ключей."""
     @contextlib.asynccontextmanager
     async def transaction(self) -> AsyncGenerator[None, None]:
         yield
 
     async def put_cross_signing_key(self, user_id: str, usage: CrossSigningUsage, key: str) -> None:
-        """Фикс ошибки AttributeError: can't set attribute."""
         try:
             current = self._cross_signing_keys[user_id][usage]
             self._cross_signing_keys[user_id][usage] = TOFUSigningKey(key=key, first=current.first)
         except KeyError:
             self._cross_signing_keys.setdefault(user_id, {})[usage] = TOFUSigningKey(key=key, first=key)
 
+
 class CustomMemoryStateStore(BaseMemoryStateStore):
     async def find_shared_rooms(self, user_id: str) -> list[str]:
-        shared = []
+        shared =[]
         for room_id, members in getattr(self, "members", {}).items():
-            if user_id in members: shared.append(room_id)
+            if user_id in members:
+                shared.append(room_id)
         return shared
-
-
-
-
-EMOJI_LIST = [
-    "Dog", "Cat", "Lion", "Horse", "Unicorn", "Pig", "Elephant", 
-    "Rabbit", "Panda", "Rooster", "Penguin", "Turtle", "Fish", 
-    "Octopus", "Butterfly", "Flower", "Tree", "Cactus", "Mushroom", 
-    "Globe", "Moon", "Cloud", "Fire", "Banana", "Apple", "Strawberry", 
-    "Corn", "Pizza", "Cake", "Heart", "Smiley", "Robot", "Hat", 
-    "Glasses", "Spanner", "Santa", "Thumbs Up", "Umbrella", "Hourglass", 
-    "Clock", "Gift", "Light Bulb", "Book", "Pencil", "Paperclip", 
-    "Scissors", "Lock", "Key", "Hammer", "Telephone", "Flag", 
-    "Train", "Bicycle", "Aeroplane", "Rocket", "Trophy", "Ball", 
-    "Guitar", "Trumpet", "Bell", "Anchor", "Headphones", "Folder", "Pin"
-]
-
-
-
 
 
 class BotSASVerification:
     def __init__(self, client: Client):
         self.client = client
         self.sessions: Dict[str, Dict[str, Any]] = {}
-        logger.info("BotSASVerification инициализирован")
+        logger.info("BotSASVerification initialized")
         self.verified_event = asyncio.Event()
 
     def get_canonical_json(self, data: dict) -> str:
@@ -249,39 +236,52 @@ class BotSASVerification:
 
     async def handle_decrypted_event(self, evt: ToDeviceEvent):
         t = evt.type.t if hasattr(evt.type, "t") else str(evt.type)
-        if "m.key.verification." not in t: return
+        if "m.key.verification." not in t:
+            return
         
-        if t == "m.key.verification.request": await self.handle_request(evt)
-        elif t == "m.key.verification.ready": await self.handle_ready(evt)
-        elif t == "m.key.verification.start": await self.handle_start(evt)
-        elif t == "m.key.verification.accept": await self.handle_accept(evt)
-        elif t == "m.key.verification.key": await self.handle_key(evt)
-        elif t == "m.key.verification.mac": await self.handle_mac(evt)
-        elif t == "m.key.verification.cancel": self.sessions.pop(evt.content.get("transaction_id"), None)
+        if t == "m.key.verification.request":
+            await self.handle_request(evt)
+        elif t == "m.key.verification.ready":
+            await self.handle_ready(evt)
+        elif t == "m.key.verification.start":
+            await self.handle_start(evt)
+        elif t == "m.key.verification.accept":
+            await self.handle_accept(evt)
+        elif t == "m.key.verification.key":
+            await self.handle_key(evt)
+        elif t == "m.key.verification.mac":
+            await self.handle_mac(evt)
+        elif t == "m.key.verification.cancel":
+            self.sessions.pop(evt.content.get("transaction_id"), None)
 
     async def start_verification(self, user_id: str, device_id: str, room_id: str):
-        import uuid
         txn_id = f"v-{uuid.uuid4().hex[:8]}"
         self.sessions[txn_id] = {
             "sas": Sas(), "user_id": user_id, "device_id": device_id,
             "role": "alice", "room_id": room_id,
-            "bot_mac_sent": False, "other_mac_received": False # Флаги готовности
+            "bot_mac_sent": False, "other_mac_received": False
         }
         await self.client.send_to_one_device(
             EventType.find("m.key.verification.request", EventType.Class.TO_DEVICE),
             user_id, device_id, 
-            {"from_device": self.client.device_id, "methods": ["m.sas.v1"], "transaction_id": txn_id, "timestamp": int(time.time() * 1000)}
+            {
+                "from_device": self.client.device_id,
+                "methods": ["m.sas.v1"],
+                "transaction_id": txn_id,
+                "timestamp": int(time.time() * 1000)
+            }
         )
         return txn_id
 
     async def handle_ready(self, evt: ToDeviceEvent):
         txn_id = evt.content.get("transaction_id")
         s = self.sessions.get(txn_id)
-        if not s or s["role"] != "alice": return
+        if not s or s["role"] != "alice":
+            return
         start_content = {
             "from_device": self.client.device_id, "method": "m.sas.v1",
-            "key_agreement_protocols": ["curve25519-hkdf-sha256", "curve25519"],
-            "hashes": ["sha256"], "message_authentication_codes": ["hkdf-hmac-sha256"],
+            "key_agreement_protocols":["curve25519-hkdf-sha256", "curve25519"],
+            "hashes": ["sha256"], "message_authentication_codes":["hkdf-hmac-sha256"],
             "short_authentication_string": ["emoji"], "transaction_id": txn_id
         }
         s["start_content"] = start_content
@@ -293,7 +293,8 @@ class BotSASVerification:
     async def handle_accept(self, evt: ToDeviceEvent):
         txn_id = evt.content.get("transaction_id")
         s = self.sessions.get(txn_id)
-        if not s or s["role"] != "alice": return
+        if not s or s["role"] != "alice":
+            return
         await self.client.send_to_one_device(
             EventType.find("m.key.verification.key", EventType.Class.TO_DEVICE),
             s["user_id"], s["device_id"], {"transaction_id": txn_id, "key": s["sas"].pubkey.replace("=", "")}
@@ -307,13 +308,14 @@ class BotSASVerification:
         }
         await self.client.send_to_one_device(
             EventType.find("m.key.verification.ready", EventType.Class.TO_DEVICE),
-            evt.sender, self.sessions[txn_id]["device_id"], {"transaction_id": txn_id, "methods": ["m.sas.v1"]}
+            evt.sender, self.sessions[txn_id]["device_id"], {"transaction_id": txn_id, "methods":["m.sas.v1"]}
         )
 
     async def handle_start(self, evt: ToDeviceEvent):
         txn_id = evt.content.get("transaction_id")
         s = self.sessions.get(txn_id)
-        if not s or s["role"] != "bob": return
+        if not s or s["role"] != "bob":
+            return
         sas = s["sas"]
         start_content = evt.content.serialize() if hasattr(evt.content, "serialize") else evt.content
         s["start_content"] = start_content
@@ -331,7 +333,8 @@ class BotSASVerification:
     async def handle_key(self, evt: ToDeviceEvent):
         txn_id = evt.content.get("transaction_id")
         s = self.sessions.get(txn_id)
-        if not s: return
+        if not s:
+            return
         their_key = evt.content.get("key")
         s["sas"].set_their_pubkey(their_key + "=" * ((4 - len(their_key) % 4) % 4))
         my_pubkey = s["sas"].pubkey.replace("=", "")
@@ -347,17 +350,18 @@ class BotSASVerification:
         sas_info = f"MATRIX_KEY_VERIFICATION_SAS|{a_id}|{a_dev}|{a_pk}|{b_id}|{b_dev}|{b_pk}|{txn_id}"
         sas_bytes = s["sas"].generate_bytes(sas_info.encode("utf-8"), 6)
         val = int.from_bytes(sas_bytes, "big")
-        emojis = [f"{ (val >> (42 - (i * 6))) & 0x3F }:{EMOJI_LIST[(val >> (42 - (i * 6))) & 0x3F]}" for i in range(7)]
+        emojis =[f"{ (val >> (42 - (i * 6))) & 0x3F }:{EMOJI_LIST[(val >> (42 - (i * 6))) & 0x3F]}" for i in range(7)]
         
         if s.get("room_id"):
-            await self.client.send_notice(s["room_id"], f"📊 <b>СВЕРЬ ЭМОДЗИ:</b>\n\n<code>{' | '.join(emojis)}</code>\n\n⏳ Подтверждаю автоматически...")
+            await self.client.send_notice(s["room_id"], f"📊 <b>VERIFY EMOJI:</b>\n\n<code>{' | '.join(emojis)}</code>\n\n⏳ Confirming automatically...")
 
         await asyncio.sleep(3)
         asyncio.create_task(self._send_actual_mac(txn_id))
 
     async def _send_actual_mac(self, txn_id: str):
         s = self.sessions.get(txn_id)
-        if not s or s["bot_mac_sent"]: return
+        if not s or s["bot_mac_sent"]:
+            return
         
         sas = s["sas"]
         user_id, device_id = self.client.mxid, self.client.device_id
@@ -378,9 +382,10 @@ class BotSASVerification:
     async def handle_mac(self, evt: ToDeviceEvent):
         txn_id = evt.content.get("transaction_id")
         s = self.sessions.get(txn_id)
-        if not s: return
+        if not s:
+            return
         s["other_mac_received"] = True
-        logger.info(f"Получен MAC от устройства {s['device_id']}")
+        logger.info(f"Received MAC from device {s['device_id']}")
         await self._maybe_finish(txn_id)
 
     async def _maybe_finish(self, txn_id: str):
@@ -396,9 +401,8 @@ class BotSASVerification:
                 device.trust = TrustState.VERIFIED
                 await self.client.crypto.crypto_store.put_devices(s["user_id"], {s["device_id"]: device})
                 
-                
-                logger.success(f"🎊 УСПЕХ: Устройство {s['device_id']} верифицировано локально!")
+                logger.success(f"🎊 SUCCESS: Device {s['device_id']} verified locally!")
                 if s.get("room_id"):
-                    await self.client.send_notice(s["room_id"], f"✅ Устройство {s['device_id']} верифицировано!")
+                    await self.client.send_notice(s["room_id"], f"✅ Device {s['device_id']} verified!")
             
             self.sessions.pop(txn_id, None)
