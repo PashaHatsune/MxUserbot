@@ -166,11 +166,9 @@ class Loader:
         community_files = [f for f in self.community_path.iterdir() if f.suffix == ".py" and not f.name.startswith("_")]
         core_files = [f for f in self.core_path.iterdir() if f.suffix == ".py" and not f.name.startswith("_")]
 
-        # ВАЖНО: Сначала загружаем Core. Они займут имена в active_modules.
         for path in core_files:
             await self.register_module(path, bot, is_core=True)
 
-        # Теперь Community. Если будет конфликт, модуль просто не загрузится.
         for path in community_files:
             await self.register_module(path, bot, is_core=False)
 
@@ -189,8 +187,12 @@ class Loader:
 
             module = importlib.util.module_from_spec(spec)
             module.__package__ = f"src.mxuserbot.modules.{subfolder}"
-            
-            spec.loader.exec_module(module)
+
+            try:
+                spec.loader.exec_module(module)
+            except Exception as e:
+                logger.error(f"[{path.stem}] Execution error: {e}")
+                return
 
             if not hasattr(module, 'Meta'):
                 logger.info(f"[{path.stem}] Отсутствует класс Meta. Модуль не будет загружен.")
@@ -241,10 +243,8 @@ class Loader:
                         if "modules/community" in frame_info.filename.replace("\\", "/"):
                             logger.critical(f"[SECURITY BLOCK] Модуль из community пытался подменить память в Core: {name}")
                             raise PermissionError("Security: Core modules are frozen in memory and cannot be modified!")
-                    # Если вызывает ядро - разрешаем
                     object.__setattr__(obj, name, value)
                 
-                # Применяем защиту к классу
                 cls.__setattr__ = secure_setattr
             
             instance = cls()
