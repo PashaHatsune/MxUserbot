@@ -8,7 +8,7 @@ import sys
 import time
 import uuid
 from abc import ABC
-from typing import Any, AsyncGenerator, Dict
+from typing import Any, AsyncGenerator, Dict, Optional, Callable
 
 import aiohttp
 from loguru import logger
@@ -44,23 +44,76 @@ EMOJI_LIST =[
 ]
 
 
+import asyncio
+
 class ModuleConfig:
-    def __init__(self, getter_func, setter_func, **defaults):
+    def __init__(self, getter_func, setter_func, schema: dict):
         self._getter = getter_func
         self._setter = setter_func
-        self._cache = defaults.copy()
+        # schema  {"limit": ConfigValue(10, "...")}
+        self._schema = schema
+        self._cache = {key: cfg.default for key, cfg in schema.items()}
 
     async def _load_from_db(self):
-        for key in self._cache.keys():
-            val = await self._getter(key, self._cache[key])
-            self._cache[key] = val
+        """Вызывается при инициализации модуля."""
+        for key, cfg in self._schema.items():
+            db_val = await self._getter(key, cfg.default)
+            self._cache[key] = cfg._convert(db_val)
 
     def __getitem__(self, key):
         return self._cache.get(key)
 
-    def __setitem__(self, key, value):
-        self._cache[key] = value
-        asyncio.create_task(self._setter(key, value))
+    def set(self, key: str, raw_value: Any) -> bool:
+        """
+        Устанавливает значение, валидирует его и пишет в БД.
+        Возвращает True если успешно.
+        """
+        if key not in self._schema:
+            return False
+        
+        cfg = self._schema[key]
+        try:
+            converted = cfg._convert(raw_value)
+            if cfg.validator and not cfg.validator(converted):
+                return False
+            
+            self._cache[key] = converted
+            asyncio.create_task(self._setter(key, converted))
+            return True
+        except Exception:
+            return False
+
+    def get_description(self, key):
+        return self._schema[key].description if key in self._schema else ""
+
+
+class ConfigValue:
+    def __init__(
+        self,
+        default: Any,
+        description: str = "",
+        validator: Optional[Callable[[Any], bool]] = None
+    ):
+        self.default = default
+        self.description = description
+        self.validator = validator
+        self.type = type(default)
+
+    def _convert(self, val: Any) -> Any:
+        """Приводит входное значение (обычно строку из чата) к нужному типу."""
+        if isinstance(val, self.type):
+            return val
+        
+        if isinstance(val, str):
+            if self.type == bool:
+                return val.lower() in ("true", "yes", "1", "y", "on")
+            if self.type == int:
+                return int(val)
+            if self.type == float:
+                return float(val)
+            if self.type == list or self.type == dict:
+                return json.loads(val)
+        return val
 
 
 class Module(ABC):
@@ -92,9 +145,12 @@ class Module(ABC):
         self.strings = getattr(self.__class__, "strings", {}).copy()
         self.friendly_name = self.strings.get("name") or self.config.get("name") or self.__class__.__name__
 
-        defaults = getattr(self, "config", {})
-        
-        self.config = ModuleConfig(self._get, self._set, **defaults)
+        schema = getattr(self.__class__, "config", {})
+        self.config = ModuleConfig(
+            self._get,
+            self._set,
+            schema
+        )
         await self.config._load_from_db()
 
         self._commands = {}
