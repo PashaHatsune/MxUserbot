@@ -8,17 +8,35 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Inter', sans-serif; }
-        .card-active { display: block !important; animation: fadeIn 0.3s ease-out forwards; }
+        
+        .card { display: none; }
+        
+        .card-active { 
+            display: block; 
+            animation: fadeIn 0.25s ease-out forwards; 
+        }
+        
+        .card-exit { 
+            display: block; 
+            animation: fadeOut 0.2s ease-in forwards; 
+        }
+
         @keyframes fadeIn { 
-            from { opacity: 0; transform: translateY(10px); } 
+            from { opacity: 0; transform: translateY(15px); } 
             to { opacity: 1; transform: translateY(0); } 
+        }
+        
+        @keyframes fadeOut { 
+            from { opacity: 1; transform: translateY(0); } 
+            to { opacity: 0; transform: translateY(-15px); } 
         }
     </style>
 </head>
 <body class="bg-[#0b0b0f] text-[#ececed] min-h-screen flex items-center justify-center p-5 overflow-hidden">
 
     <div class="w-full max-w-[580px] z-10">
-        <div id="scr-welcome" class="card bg-[#16161a] border border-[#2d2d35] rounded-xl p-10 hidden text-center shadow-2xl card-active">
+        
+        <div id="scr-welcome" class="card bg-[#16161a] border border-[#2d2d35] rounded-xl p-10 text-center shadow-2xl card-active">
             <h1 class="text-2xl font-semibold mb-3 tracking-tight text-white">MXUserbot</h1>
             <p class="text-[#94949e] text-sm mb-6">Expand the capabilities of your Matrix account.</p>
             
@@ -47,7 +65,7 @@
             </button>
         </div>
 
-        <div id="scr-warning" class="card bg-[#16161a] border border-[#2d2d35] rounded-xl p-10 hidden text-center shadow-2xl">
+        <div id="scr-warning" class="card bg-[#16161a] border border-[#2d2d35] rounded-xl p-10 text-center shadow-2xl">
             <h1 class="text-2xl font-semibold mb-3 tracking-tight text-[#f87171]">⚠️ | WARNING | ⚠️</h1>
             <p class="text-[#94949e] text-sm mb-6">Please review the terms of use.</p>
             
@@ -73,7 +91,7 @@
             </div>
         </div>
 
-        <form id="scr-login" class="card bg-[#16161a] border border-[#2d2d35] rounded-xl p-10 hidden text-center shadow-2xl">
+        <form id="scr-login" class="card bg-[#16161a] border border-[#2d2d35] rounded-xl p-10 text-center shadow-2xl">
             <h1 class="text-2xl font-semibold mb-3 tracking-tight text-white">Authorization</h1>
             <p class="text-[#94949e] text-sm mb-6">Connect your account to initialize the session.</p>
             
@@ -98,13 +116,13 @@
             </div>
         </form>
 
-        <div id="scr-loading" class="card bg-[#16161a] border border-[#2d2d35] rounded-xl p-10 hidden text-center shadow-2xl">
+        <div id="scr-loading" class="card bg-[#16161a] border border-[#2d2d35] rounded-xl p-10 text-center shadow-2xl">
             <div class="w-8 h-8 border-2 border-white/5 border-t-[#ffb2ef] rounded-full animate-spin mx-auto mb-5"></div>
             <h1 class="text-2xl font-semibold mb-3 text-white">Initializing</h1>
             <p class="text-[#94949e] text-sm">Establishing tunnel and syncing keys...</p>
         </div>
 
-        <div id="scr-result" class="card bg-[#16161a] border border-[#2d2d35] rounded-xl p-10 hidden text-center shadow-2xl">
+        <div id="scr-result" class="card bg-[#16161a] border border-[#2d2d35] rounded-xl p-10 text-center shadow-2xl">
             <h1 id="res-title" class="text-2xl font-semibold mb-3 text-white">Status</h1>
             <p id="res-desc" class="text-[#94949e] text-sm mb-6"></p>
             <div id="res-actions"></div>
@@ -113,18 +131,21 @@
 
     <script>
         const nav = (from, to) => {
-            document.getElementById(from).classList.remove('card-active');
+            const elFrom = document.getElementById(from);
+            const elTo = document.getElementById(to);
+            
+            elFrom.classList.remove('card-active');
+            elFrom.classList.add('card-exit');
+            
             setTimeout(() => {
-                document.getElementById(from).style.display = 'none';
-                const t = document.getElementById(to);
-                t.style.display = 'block';
-                setTimeout(() => t.classList.add('card-active'), 10);
-            }, 50);
+                elFrom.classList.remove('card-exit');
+                elTo.classList.add('card-active');
+            }, 200);
         };
 
         const terminate = () => {
             document.body.innerHTML = `
-                <div class="w-full max-w-[580px] bg-[#16161a] border border-[#f87171] rounded-xl p-10 text-center shadow-2xl animate-[fadeIn_0.3s_ease-out]">
+                <div class="w-full max-w-[580px] bg-[#16161a] border border-[#f87171] rounded-xl p-10 text-center shadow-2xl card-active">
                     <h1 class="text-2xl font-semibold mb-3 text-[#f87171]">Access Denied</h1>
                     <p class="text-[#94949e] text-sm">Session terminated.</p>
                 </div>`;
