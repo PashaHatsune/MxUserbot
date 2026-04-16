@@ -11,7 +11,7 @@ from pathlib import Path
 from loguru import logger
 
 from . import utils
-from .types import Module 
+from .types import Module, ConfigValue
 
 _MODULE_NAME_BY_HASH: typing.Dict[str, str] = {}
 
