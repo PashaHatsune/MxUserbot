@@ -11,7 +11,6 @@ from mautrix.api import Method
 from mautrix.crypto.attachments import encrypt_attachment
 from mautrix.types import (
     EncryptedEvent,
-    EventID,
     EventType,
     Format,
     ImageInfo,
@@ -402,22 +401,23 @@ async def clear_rpc(mx):
     return await mx.client.api.request(Method.DELETE, endpoint)
 
 
-def get_args(message) -> list:
-    """Extract arguments from a message string using shell-like syntax."""
-    if not (message := getattr(message, "message", message)):
-        return False
-
-    if len(message := message.split(maxsplit=1)) <= 1:
+async def get_args(mx, event) -> list:
+    """
+    Получает аргументы команды в виде списка. 
+    Использует get_args_raw для извлечения текста (включая реплеи) 
+    и shlex для парсинга (обработка кавычек).
+    """
+    raw = await get_args_raw(mx, event)
+    
+    if not raw:
         return []
 
-    message = message[1]
-
     try:
-        split = shlex.split(message)
+        args = shlex.split(raw)
     except ValueError:
-        return message
+        args = raw.split()
 
-    return list(filter(lambda x: len(x) > 0, split))
+    return list(filter(lambda x: len(x) > 0, args))
 
 
 def escape_html(text: str, /) -> str:
