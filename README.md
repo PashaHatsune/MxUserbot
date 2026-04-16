@@ -64,6 +64,10 @@ Quick links:
 
 ---
 
+# Donate
+https://destream.net/live/Pashahatsune/donate
+
+
 This software is provided **"as is"**, without warranty of any kind, express or implied. By using this userbot, you acknowledge that:
 
 * **Full Responsibility:** You are solely responsible for your actions and any consequences resulting from the use of this software.
