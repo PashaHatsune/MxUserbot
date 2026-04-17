@@ -11,8 +11,10 @@ from mautrix.types import (
 if TYPE_CHECKING:
     from ..__main__ import MXUserBot
 
+
 invite_whitelist = {}
 join_on_invite = True
+
 
 class CallBack:
     def __init__(self, mx: 'MXUserBot'):
