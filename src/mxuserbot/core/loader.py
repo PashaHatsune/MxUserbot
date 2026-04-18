@@ -317,7 +317,7 @@ class Loader:
             
             instance._is_ready = True
             
-            logger.success(f"Модуль {name} успешно запущен в фоне.")
+            logger.success(f"Module {name} is started!")
         except Exception:
             logger.exception(f"Ошибка при запуске модуля {name}")
 

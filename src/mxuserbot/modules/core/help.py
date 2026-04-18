@@ -16,8 +16,14 @@ class HelperModule(loader.Module):
     strings = {
         "header": "<b>💠 {name}</b><br><i>{desc}</i><br><br>",
         "default_desc": "Your personal Matrix assistant",
-        "modules_title": "<b>Available modules and commands:</b><br>",
-        "module_item": "▫️ <b>{name}</b> — <i>{desc}</i><br>    ⬥ {commands}<br><br>",
+        "modules_title": "<b>Available modules (click to expand):</b><br><br>",
+        "module_item": (
+            "<details>"
+            "<summary>▫️ <b>{name}</b></summary>"
+            "<i>{desc}</i><br>"
+            "⬥ {commands}"
+            "</details>"
+        ),
         
         "module_info": "<b>📦 Module:</b> {name}<br><b>ℹ️ Description:</b> {desc}<br><br>",
         "config_title": "<b>⚙️ Settings (Configuration):</b><br>",
@@ -58,7 +64,13 @@ class HelperModule(loader.Module):
             )
             msg += self.strings.get("modules_title")
 
-            for mod in mx.active_modules.values():
+            # Сортируем модули по имени для удобства
+            sorted_modules = sorted(
+                mx.active_modules.values(), 
+                key=lambda x: (x.Meta.name if hasattr(x, "Meta") else x.__class__.__name__)
+            )
+
+            for mod in sorted_modules:
                 name = mod.Meta.name if hasattr(mod, "Meta") else mod.__class__.__name__
                 desc = mod.Meta._cls_doc if hasattr(mod, "Meta") else self.strings.get("no_desc")
                 
@@ -72,6 +84,7 @@ class HelperModule(loader.Module):
                     desc=desc,
                     commands=cmds
                 )
+            
             return await utils.answer(mx, msg)
 
         target = args[0].lower()
