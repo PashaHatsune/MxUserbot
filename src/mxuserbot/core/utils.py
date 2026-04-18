@@ -438,3 +438,151 @@ def get_base_dir() -> str:
 def get_dir(mod: str) -> str:
     """Get the absolute directory path of a given module."""
     return os.path.abspath(os.path.dirname(os.path.abspath(mod)))
+
+
+async def is_dm(mx, room_id: str) -> bool:
+    direct_data = await mx.client.get_account_data(EventType.DIRECT)
+
+    return any(
+        room_id in rooms
+        for rooms in direct_data.values()
+    )
+
+
+
+import json
+from pathlib import Path
+from mautrix.types import EncryptedEvent, MessageType
+from mautrix.crypto.attachments import decrypt_attachment
+
+def convert_repo_url(url: str) -> str:
+    url = url.strip().rstrip("/")
+    if "github.com" in url and "raw.githubusercontent.com" not in url:
+        url = url.replace("github.com", "raw.githubusercontent.com")
+        if "/tree/" in url:
+            url = url.replace("/tree/", "/")
+        else:
+            url += "/main"
+    return url
+
+def get_prefix_from_url(url: str) -> str:
+    parts = url.split("/")
+    if "raw.githubusercontent.com" in url:
+        return parts[3]
+    return "community"
+
+async def get_module_file(mx, event) -> tuple[str, bytes]:
+    """Извлекает имя файла и его байты из сообщения Matrix (включая E2EE)."""
+    if isinstance(event, EncryptedEvent):
+        try:
+            decrypted = await mx.client.crypto.decrypt_megolm_event(event)
+            content = decrypted.content
+        except Exception as e:
+            raise ValueError("decrypt_err") from e
+    else:
+        content = event.content
+
+    if content.msgtype != MessageType.FILE:
+        raise ValueError("not_a_file")
+
+    filename = content.body
+    if content.file:
+        ciphertext = await mx.client.download_media(content.file.url)
+        code_bytes = decrypt_attachment(ciphertext, content.file.key.key, content.file.hashes.get("sha256"), content.file.iv)
+    else:
+        code_bytes = await mx.client.download_media(content.url)
+        
+    return filename, code_bytes
+
+
+
+from pathlib import Path
+
+
+async def install_module(mx, filename: str, code: str) -> bool:
+    """Сохраняет код модуля и регистрирует его через ядро."""
+    loader = mx._bot.all_modules
+    
+    path = Path(loader.community_path) / filename
+    path.write_text(code, encoding="utf-8")
+    
+    await loader.register_module(path, mx, is_core=False)
+    
+    if path.stem in mx.active_modules:
+        return True
+    
+    if path.exists(): 
+        path.unlink()
+    return False
+
+
+async def uninstall_module(mx, name: str):
+    """Выгружает и удаляет файл модуля."""
+    loader = mx._bot.all_modules
+    
+    await loader.unload_module(name, mx)
+    
+    path = Path(loader.community_path) / f"{name}.py"
+    if path.exists():
+        path.unlink()
+
+
+async def get_community_repo(db) -> list:
+    """Безопасно извлекает список репозиториев из БД."""
+    raw = await db.get("core", "community_repos")
+    if not raw: return[]
+    if isinstance(raw, list): return raw
+    try: return json.loads(raw)
+    except: return[]
+
+
+async def set_community_repo(db, repos: list):
+    """Сохраняет список репозиториев в БД."""
+    await db.set("core", "community_repos", json.dumps(repos))
+
+
+async def resolve_module_target(target: str, system_repo: str, community_repos: list, request_func) -> tuple[str, str, bool, bool]:
+    """
+    Превращает запрос пользователя в конкретную ссылку и имя файла.
+    Возвращает: (url, filename, is_community, is_direct_link)
+    """
+    if target.startswith("http"):
+        filename = target.split("/")[-1] if target.endswith(".py") else target.split("/")[-1] + ".py"
+        return target, filename, True, True
+
+    if "/" in target:
+        user_prefix, mod_id = target.split("/", 1)
+        for r_url in community_repos:
+            if user_prefix.lower() in r_url.lower():
+                try:
+                    data = await request_func(f"{r_url}/index.json", return_type="json")
+                    mod = next((m for m in data.get("modules",[]) if m.get("id") == mod_id), None)
+                    if mod:
+                        return f"{r_url}/modules/{mod['path']}", mod['path'], True, False
+                except: continue
+    else:
+        try:
+            data = await request_func(f"{system_repo}/index.json", return_type="json")
+            mod = next((m for m in data.get("modules",[]) if m.get("id") == target), None)
+            if mod:
+                return f"{system_repo}/modules/{mod['path']}", mod['path'], False, False
+        except: pass
+
+    return None, None, False, False
+
+
+async def search_modules_in_repo(query: str, system_repo: str, community_repos: list, request_func) -> list:
+    """Ищет модули по всем репозиториям. Возвращает структурированный список результатов."""
+    results = []
+    for r_url in [system_repo] + community_repos:
+        try:
+            data = await request_func(f"{r_url}/index.json", return_type="json")
+            matches = [m for m in data.get("modules", []) if query in f"{m.get('id')} {m.get('name')} {m.get('description')}".lower()]
+            if matches:
+                results.append({
+                    "url": r_url, 
+                    "is_system": r_url == system_repo, 
+                    "modules": matches
+                })
+        except: continue
+    return results
