@@ -104,7 +104,7 @@ class MXUserBot(Program):
             name='MXUserBot',
             description="MXUserbot - matrix userbot.",
             command="-",
-            version="1.0 | BETA",
+            version="1.5 | BETA",
             config_class=Config
         )
         self.client: Optional[Client] = None
