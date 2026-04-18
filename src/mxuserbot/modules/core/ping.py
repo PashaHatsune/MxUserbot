@@ -19,10 +19,8 @@ class PingPongModule(loader.Module):
 
     strings = {
         "name": "PingPong",
-        "pinging": "<b>🏓 Pinging...</b>",
-        "pong": "<b>🏓 Pong!</b>\n<b>🚀 Latency:</b> <code>{} ms</code>",
-        "dm_yes": "<b>📩 Это личка (DM)</b>",
-        "dm_no": "<b>👥 Это не личка, а группа/комната</b>",
+        "pinging": "<b>🏓 | Pinging...</b>",
+        "pong": "<b>🏓 | Pong!</b><br><b>🚀 | Latency:</b> <code>{} ms</code>",
     }
 
     @loader.command()
@@ -30,12 +28,12 @@ class PingPongModule(loader.Module):
         """Check bot latency"""
         start = time.perf_counter()
 
-        message = await utils.answer(mx, self.strings("pinging"))
+        await utils.answer(mx, self.strings.get("pinging"))
 
         end = time.perf_counter()
         duration = round((end - start) * 1000, 2)
 
         await utils.answer(
-            message,
-            self.strings("pong").format(duration)
+            mx,
+            self.strings.get("pong").format(duration)
         )
