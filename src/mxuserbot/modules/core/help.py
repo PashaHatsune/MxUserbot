@@ -179,7 +179,7 @@ class HelperModule(loader.Module):
         await utils.send_image(
             mx=mx, 
             room_id=event.room_id,
-            url="mxc://pashahatsune.pp.ua/ZPKENBwSwKgbFvrYWByGr1140eNqWQyL",
+            url="mxc://pashahatsune.pp.ua/pjiDYu8KhNf35zAzmVaAoNKijH6gsylj",
             caption=self.strings.get("info_caption").format(
                 version=mx.version
             ),
