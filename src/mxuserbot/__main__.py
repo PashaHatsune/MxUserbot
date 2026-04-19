@@ -100,7 +100,7 @@ class MXUserBot(Program):
         super().__init__(
             module='main', name='MXUserBot',
             description="MXUserbot - matrix userbot.",
-            command="-", version="1.5 | BETA", config_class=Config
+            command="-", version="1.7 | BETA", config_class=Config
         )
         self.client: Optional[Client] = None
         self._db: Optional[Database] = None
