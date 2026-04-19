@@ -122,15 +122,11 @@ class MXUserBot(Program):
     async def _setup_logs(self) -> str:
             log_room_id = await self._db.get("core", "log_room_id")
             if log_room_id:
-                self.log.info(f"ID комнаты логов взят из БД: {log_room_id}")
                 return str(log_room_id)
-
-            self.log.info("В базе пусто, сука... Начинаю шуршать по твоим 70+ комнатам в поисках старых логов.")
 
             try:
                 joined_rooms = await self.client.get_joined_rooms()
             except Exception as e:
-                self.log.error(f"НЕ СМОГ ПОЛУЧИТЬ СПИСОК КОМНАТ: {e}")
                 joined_rooms =[]
 
             target_name = "[LOGS] | MX-USERBOT"
@@ -152,11 +148,9 @@ class MXUserBot(Program):
                         break
 
             if found_id:
-                self.log.success(f"АГА, НАШЕЛ! Старая комната жива: {found_id}. Записываю в базу.")
                 await self._db.set("core", "log_room_id", str(found_id))
                 return str(found_id)
 
-            self.log.warning("Нихуя не нашел. Создаю новую комнату, деваться некуда...")
             
             avatar_url = "mxc://pashahatsune.pp.ua/hGaNZRrDKOF5HlHjZ8VilRWj5QHFOXoy"
             initial_state =[
@@ -181,7 +175,6 @@ class MXUserBot(Program):
                 
                 await self._db.set("core", "log_room_id", str(new_room_id))
                 
-                # Информируем пользователя
                 await utils.answer(
                     self.interface, 
                     "✅ | Log room successfully initialized.", 
@@ -189,13 +182,9 @@ class MXUserBot(Program):
                     edit_id=None
                 )
 
-                
-                
-                self.log.info(f"Создана новая комната: {new_room_id}. ID сохранен.")
                 return str(new_room_id)
-                
+
             except Exception as e:
-                self.log.critical(f"ПИЗДЕЦ! Даже комнату создать не могу: {e}")
                 raise e
 
 
