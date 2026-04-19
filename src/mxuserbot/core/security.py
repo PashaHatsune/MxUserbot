@@ -33,8 +33,7 @@ class SekaiSecurity:
         self.comm_marker = "/modules/community/"
         
         self.forbidden_api =[
-            "join", "leave", "invite", "set_displayname", 
-            "set_avatar_url", "room_put_state", "room_redact"
+
         ]
         self.forbidden_core =[
             "login", "logout", "logout_all", "create_device_msc4190",
@@ -72,14 +71,15 @@ class SekaiSecurity:
         self._enable_firewall()
 
     def _is_community_caller(self) -> bool:
-        """Проверка для Runtime-защиты (файлы, импорты)"""
-        f = sys._getframe(1) 
-        while f:
+        """
+        Проверяет НЕПОСРЕДСТВЕННОГО инициатора. 
+        Если это файл из community — True.
+        """
+        try:
+            f = sys._getframe(2)
             fn = f.f_code.co_filename.replace("\\", "/")
-            if self.comm_marker in fn:
-                return True
-            f = f.f_back
-        return False
+            return self.comm_marker in fn
+        except: return False
 
     def _enable_firewall(self):
         def core_audit_hook(event, args):
