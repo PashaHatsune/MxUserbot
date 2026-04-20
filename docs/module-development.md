@@ -1,124 +1,105 @@
+LISTEN UP. Here is your dev guide. Clean, simple, and in English.
 
+To write a module, you need:
+1. An installed MxUserbot.
+2. A `.py` file in `src/mxuserbot/modules/community`. Let’s call it `test.py`.
 
+### Module Basics:
 
-
-Для написания модуля вам нужно:
-
-1. Естественно, уже установленный MxUserbot.
-2. Создайте `.py` файл в папке `src/mxuserbot/modules/community`. Например, это будет: `test.py`
-
-### Создание модулей:
-
-1. Импортируйте обязательные модули:
+1. **Import the essentials:**
 ```python
 from ...core import loader, utils
 ```
 
-2. Создайте `class Meta`:
+2. **Define the `Meta` class:**
 ```python
 class Meta:
-    name = "TestMoModule"
-    _cls_doc = "Скидывает случайные изображения Астольфо с astolfo.rocks" 
+    name = "AstolfoModule"
+    _cls_doc = "Sends random Astolfo pics from astolfo.rocks" 
     version = "1.1"
     tags = ["api"]
+    # Optional: dependencies = ["pillow", "av"]
 ```
-**Обязательно:** `name` / `_cls_doc` / `version` / `tags`
-**Необязательно:** `dependencies` - зависимости. идет так: dependencies = ["pillow", "av", ...]
+**Required:** `name`, `_cls_doc`, `version`, `tags`.
+**Optional:** `dependencies` (list of pip packages).
 
-3. Создаём основной класс:
+3. **Create the main class:**
 ```python
-
-@loader.tds # импортируем 
+@loader.tds # Always use this decorator
 class TestModule(loader.Module):
-    strings = {"error": "Ошибка при получении няшности"}
+    strings = {"error": "Failed to get cuteness"}
 
     config = {
-        "limit": loader.ConfigValue(10, "Лимит запросов", lambda x: x > 0),
-        "api_key": loader.ConfigValue("NONE", "Ключ доступа"),
-        "silent": loader.ConfigValue(False, "Тихий режим")
+        "limit": loader.ConfigValue(10, "Request limit", lambda x: x > 0),
+        "api_key": loader.ConfigValue("NONE", "API Key"),
+        "silent": loader.ConfigValue(False, "Silent mode")
     }
 ```
 
-**Чуть подробнее:**
-* При названии вашего класса ядро будет смотреть на название `Module` — это и будет основной модуль, что бот импортирует.
-* `strings` обязателен. Указывайте туда значение `key: value` для текста. Если нет желания его заполнять — можно оставить пустым.
-* `config` необязательно. Позволяет настраивать модули, если тот требует, например, ключ api, или настроить модуль. `key: ConfigValue(default, description, type)`.Для задействования , используйте loader.ConfigValue`.
+**Quick breakdown:**
+* **Class naming:** The core looks for a class with "Module" in its name.
+* **`strings`:** MUST be a dictionary. Use it for all your texts. Access them via `self.strings.get("key")`.
+* **`config`:** Optional. Use `loader.ConfigValue(default, description, validator)`.
 
-После инициализации класса мы можем реализовать первую команду:
+### Writing Commands:
 
 ```python
     @loader.command()
     async def test(self, mx, event):
-        """тест модуль для получения картинок"""
+        """test command to get images"""
 ```
 
-`@loader.command()` — так ядро понимает, что ваша функция — это команда. Вы можете изменить команду при помощи `name="miku"`, и вместо `test` Юзерботбот будет реагировать на команду `miku`.
+* `@loader.command()`: Tells the core this is a command. You can use `@loader.command(name="miku")` to change the trigger.
+* **Arguments:** 
+    * `self`: The class instance.
+    * `mx`: The interface (client wrapper).
+    * `event`: The mautrix MessageEvent.
+* **IMPORTANT:** You **MUST** write a docstring (the text in triple quotes). If a function has no docstring, the loader will ignore it.
 
-При названии своей функции вам нужно учитывать, что юзербот по умолчанию считает название функции как за имя выполняемой команды.
+### Using Utils:
 
-Принимает функция три обязательных аргумента:
-* `self` — сам класс 
-* `mx` — интерфейс (ограниченный клиент)
-* `event` — EventMessage от mautrix-python
+`utils` is your best friend. It makes life easier:
+* `utils.request`: Handles aiohttp requests.
+* `utils.answer`: Edits your message or sends a new one. Best practice: use `self.strings.get()`.
+* `utils.send_image`: Uploads and sends images. Accepts URLs or bytes.
 
-Если вы используете функцию в качестве команды, то нужно обязательно указывать док-стринг, то есть после названия функции вы в кавычках описываете, зачем нужна эта функция, иначе модуль просто не загрузится.
-
-```python
-        api_url = "https://astolfo.rocks/api/images/random"
-        data = await utils.request(api_url, params={"rating": "safe"})
-
-        if not data:
-            return await utils.answer(event, self.strings.get("error"))
-
-        img_url = f"https://astolfo.rocks/astolfo/{data['id']}.{data['file_extension']}"
-
-        image_bytes = await utils.request(img_url, return_type="bytes")
-
-        await utils.send_image(mx, event, image_bytes, file_name=f"{data['id']}.jpg")
-```
-
-`utils` здесь в роли помощника для облегчения написания модулей. Разберем:
-* `utils.request` — отправляет реквест запрос через aiohttp.
-* `utils.answer` — отправляет сообщение в чат. Обязательно передать `mx`, вторым аргументом можно указать текст. Например, здесь мы берем текст из `strings`. Рекомендуется делать это через `.get`.
-* `utils.send_image` — отправка изображения в чат. Обязательно `mx`/`event`, после чего или ссылку на изображение, или же `bytes`, `file_name` не обязателен.
-
-Ваш модуль будет выглядеть примерно так:
+### Full Example:
 
 ```python
 from ...core import loader, utils
-from ...core.types import ConfigValue
 
 class Meta:
-    name = "TestMoModule"
-    _cls_doc = "Скидывает случайные изображения Астольфо с astolfo.rocks" 
+    name = "AstolfoModule"
+    _cls_doc = "Sends random Astolfo pics" 
     version = "1.1"
     tags = ["api"]
 
 @loader.tds
 class TestModule(loader.Module):
-    strings = {"error": "Ошибка при получении няшности"}
-
-    config = {
-        "limit": ConfigValue(10, "Лимит запросов", lambda x: x > 0),
-        "api_key": ConfigValue("NONE", "Ключ доступа"),
-        "silent": ConfigValue(False, "Тихий режим")
-    }
+    strings = {"error": "API is down, rip."}
 
     @loader.command()
-    async def test(self, mx, event):
-        """тест модуль для получения картинок"""
+    async def astolfo(self, mx, event):
+        """Get a random Astolfo pic"""
         api_url = "https://astolfo.rocks/api/images/random"
         data = await utils.request(api_url, params={"rating": "safe"})
 
         if not data:
-            return await utils.answer(mx, self.strings.get("error"), event=event)
+            return await utils.answer(mx, self.strings.get("error"))
 
         img_url = f"https://astolfo.rocks/astolfo/{data['id']}.{data['file_extension']}"
-
         image_bytes = await utils.request(img_url, return_type="bytes")
 
-        await utils.send_image(mx, event, image_bytes, file_name=f"{data['id']}.jpg")
+        await utils.send_image(mx, event, image_bytes, file_name="astolfo.jpg")
 ```
 
-Остальные доступные методы смотрите здесь: src/mxuserbot/core/utils.py
-Если вам впадлу разбираться, я сгенерил utils доку через нейроку: [utils docs](utils-reference.md). Сорри. впадлу было описывать всё) 
+### Permissions (Security):
+By default, commands are available to the **Owner** and everyone in the **SUDO** list.
+
+If you want to change this, pass the `security` argument to the decorator:
+* `@loader.command(security=loader.OWNER)` — Only you.
+* `@loader.command(security=loader.EVERYONE)` — Anyone in the chat.
+* `@loader.command()` — Default (Owner + Sudo).
+
+---
+**Note:** Check `src/mxuserbot/core/utils.py` for more methods. If you're lazy, I generated a [utils reference here](utils-reference.md) using AI. I didn't feel like writing it all out manually. Sorry.
