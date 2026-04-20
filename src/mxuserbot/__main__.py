@@ -169,9 +169,7 @@ class MXUserBot(Program):
         if log_room_id:
             return str(log_room_id)
 
-        target_name = "[LOGS] | MX-USERBOT"
-        self.log.info(f"Ищу комнату {target_name}...")
-        
+        target_name = "[LOGS] | MX-USERBOT"        
         rooms = await self.client.get_joined_rooms()
         
         async def check_name(rid):
