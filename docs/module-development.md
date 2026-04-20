@@ -1,5 +1,3 @@
-LISTEN UP. Here is your dev guide. Clean, simple, and in English.
-
 To write a module, you need:
 1. An installed MxUserbot.
 2. A `.py` file in `src/mxuserbot/modules/community`. Let’s call it `test.py`.
