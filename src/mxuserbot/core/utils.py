@@ -234,17 +234,20 @@ async def answer(
         except Exception:
             pass
 
+    target_event = event or ctx_event
+
     if not room_id:
         if event:
             room_id = event.room_id
         elif ctx_event:
             room_id = ctx_event.room_id
-    
+
     if edit_id == -1:
-        if event:
-            edit_id = event.event_id
-        elif ctx_event:
-            edit_id = ctx_event.event_id
+        if target_event:
+            if target_event.sender == mx.client.mxid:
+                edit_id = target_event.event_id
+            else:
+                edit_id = None
         else:
             edit_id = None
 
